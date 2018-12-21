@@ -1,6 +1,11 @@
 demuxdir = $(pluginsdir)/demux
 demux_LTLIBRARIES =
 
+#jjustman-2018-12-18 - adding mmt demuxer
+libmmt_plugin_la_SOURCES = demux/mmt/mmtp_demuxer.c
+demux_LTLIBRARIES += libmmt_plugin.la
+#end-2018-12-18
+
 libxiph_metadata_la_SOURCES = demux/xiph_metadata.h demux/xiph_metadata.c
 libxiph_metadata_la_LDFLAGS = -static
 noinst_LTLIBRARIES += libxiph_metadata.la

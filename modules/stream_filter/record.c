@@ -77,6 +77,8 @@ static void Write  ( stream_t *, const uint8_t *p_buffer, size_t i_buffer );
  ****************************************************************************/
 static int Open ( vlc_object_t *p_this )
 {
+    return VLC_EGENERIC;
+
     stream_t *s = (stream_t*)p_this;
     stream_sys_t *p_sys;
 

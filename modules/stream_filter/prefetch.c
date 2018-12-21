@@ -429,6 +429,9 @@ static int Open(vlc_object_t *obj)
 {
     stream_t *stream = (stream_t *)obj;
 
+    //jdj-2018-12-21
+    return VLC_EGENERIC;
+
     bool fast_seek;
     /* For local files, the operating system is likely to do a better work at
      * caching/prefetching. Also, prefetching with this module could cause

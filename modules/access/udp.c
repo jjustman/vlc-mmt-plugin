@@ -105,7 +105,8 @@ static int Open( vlc_object_t *p_this )
     if( unlikely( sys == NULL ) )
         return VLC_ENOMEM;
 
-    sys->mtu = 7 * 188;
+    sys->mtu = 1514; //jdj-2018-11-18 - set this to max for udp datagram
+    //7 * 188;
 
     /* Overflow can be max theoretical datagram content less anticipated MTU,
      *  IPv6 headers are larger than IPv4, ignore IPv6 jumbograms
@@ -204,6 +205,7 @@ static void Close( vlc_object_t *p_this )
 static int Control( stream_t *p_access, int i_query, va_list args )
 {
     bool    *pb_bool;
+    int		id;
 
     switch( i_query )
     {
@@ -212,6 +214,7 @@ static int Control( stream_t *p_access, int i_query, va_list args )
         case STREAM_CAN_PAUSE:
         case STREAM_CAN_CONTROL_PACE:
             pb_bool = va_arg( args, bool * );
+           
             *pb_bool = false;
             break;
 
@@ -219,6 +222,16 @@ static int Control( stream_t *p_access, int i_query, va_list args )
             *va_arg( args, vlc_tick_t * ) =
                 VLC_TICK_FROM_MS(var_InheritInteger(p_access, "network-caching"));
             break;
+//
+//        //arg1=int i_private_data arg2=bool *
+//        case STREAM_GET_PRIVATE_ID_STATE:
+//        	id = va_arg( args, int);
+//        	id=0;
+//
+//            pb_bool = va_arg( args, bool * );
+//        	*pb_bool = false;
+//			break;
+////          return VLC_SUCCESS;
 
         default:
             return VLC_EGENERIC;
@@ -232,6 +245,8 @@ static int Control( stream_t *p_access, int i_query, va_list args )
 static block_t *BlockUDP(stream_t *access, bool *restrict eof)
 {
     access_sys_t *sys = access->p_sys;
+
+    msg_Dbg(access, "udp:: enterBlockUDP");
 
     block_t *pkt = block_Alloc(sys->mtu);
     if (unlikely(pkt == NULL))
@@ -296,8 +311,11 @@ skip:
 
         sys->mtu = len;
     }
-    else
+    else {
         pkt->i_buffer = len;
 
+        msg_Dbg(access, "udp:: recv packet raw size of: %d", len);
+
+    }
     return pkt;
 }
