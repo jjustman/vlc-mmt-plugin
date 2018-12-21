@@ -91,6 +91,8 @@ static int   Control ( demux_t *, int, va_list );
 
 typedef struct
 {
+	int 	first_demux;
+
     MP4_Box_t    *p_root;      /* container for the whole file */
 
     vlc_tick_t   i_pcr;
@@ -718,417 +720,26 @@ static int Open( vlc_object_t * p_this )
     demux_t  *p_demux = (demux_t *)p_this;
     demux_sys_t     *p_sys;
 
-    const uint8_t   *p_peek;
+    msg_Dbg( p_demux, "mp4.c: open at line: %d, parent %p", __LINE__, p_this->obj.parent);
 
-    MP4_Box_t       *p_ftyp;
-    const MP4_Box_t *p_mvhd = NULL;
-    const MP4_Box_t *p_mvex = NULL;
-
-    bool      b_enabled_es;
-
-    /* A little test to see if it could be a mp4 */
-    if( vlc_stream_Peek( p_demux->s, &p_peek, 12 ) < 12 ) return VLC_EGENERIC;
-
-    switch( VLC_FOURCC( p_peek[4], p_peek[5], p_peek[6], p_peek[7] ) )
-    {
-        case ATOM_moov:
-        case ATOM_foov:
-        case ATOM_moof:
-        case ATOM_mdat:
-        case ATOM_udta:
-        case ATOM_free:
-        case ATOM_skip:
-        case ATOM_wide:
-        case ATOM_uuid:
-        case VLC_FOURCC( 'p', 'n', 'o', 't' ):
-            break;
-        case ATOM_ftyp:
-        {
-            /* Early handle some brands */
-            switch( VLC_FOURCC(p_peek[8], p_peek[9], p_peek[10], p_peek[11]) )
-            {
-                /* HEIF pictures goes to heif demux */
-                case BRAND_heic:
-                case BRAND_heix:
-                case BRAND_mif1:
-                case BRAND_jpeg:
-                case BRAND_avci:
-                case BRAND_avif:
-                /* We don't yet support f4v, but avformat does. */
-                case BRAND_f4v:
-                    return VLC_EGENERIC;
-                default:
-                    break;
-            }
-            break;
-        }
-         default:
-            return VLC_EGENERIC;
+    if(!p_this->obj.parent) {
+    	return VLC_EGENERIC;
     }
-
-    /* create our structure that will contains all data */
-    p_sys = calloc( 1, sizeof( demux_sys_t ) );
-    if ( !p_sys )
-        return VLC_EGENERIC;
-
-    /* I need to seek */
-    vlc_stream_Control( p_demux->s, STREAM_CAN_SEEK, &p_sys->b_seekable );
-    if( p_sys->b_seekable )
-        vlc_stream_Control( p_demux->s, STREAM_CAN_FASTSEEK, &p_sys->b_fastseekable );
-
     /*Set exported functions */
-    p_demux->pf_demux = Demux;
-    p_demux->pf_control = Control;
+     p_demux->pf_demux = Demux;
+     p_demux->pf_control = Control;
+     p_sys = calloc( 1, sizeof( demux_sys_t ) );
+     if ( !p_sys )
+         return VLC_EGENERIC;
 
-    p_sys->context.i_lastseqnumber = UINT32_MAX;
+     p_sys->context.i_lastseqnumber = UINT32_MAX;
 
-    p_demux->p_sys = p_sys;
-
-    if( LoadInitFrag( p_demux ) != VLC_SUCCESS )
-        goto error;
-
-    MP4_BoxDumpStructure( p_demux->s, p_sys->p_root );
-
-    if( ( p_ftyp = MP4_BoxGet( p_sys->p_root, "/ftyp" ) ) )
-    {
-        switch( BOXDATA(p_ftyp)->i_major_brand )
-        {
-            case BRAND_isom:
-                msg_Dbg( p_demux,
-                         "ISO Media (isom) version %d.",
-                         BOXDATA(p_ftyp)->i_minor_version );
-                break;
-            case BRAND_3gp4:
-            case BRAND_3gp5:
-            case BRAND_3gp6:
-            case BRAND_3gp7:
-                msg_Dbg( p_demux, "3GPP Media Release: %4.4s",
-                         (char *)&BOXDATA(p_ftyp)->i_major_brand );
-                break;
-            case BRAND_qt__:
-                msg_Dbg( p_demux, "Apple QuickTime media" );
-                break;
-            case BRAND_isml:
-                msg_Dbg( p_demux, "PIFF (= isml = fMP4) media" );
-                break;
-            case BRAND_dash:
-                msg_Dbg( p_demux, "DASH Stream" );
-                break;
-            case BRAND_M4A:
-                msg_Dbg( p_demux, "iTunes audio" );
-                if( var_InheritBool( p_demux, CFG_PREFIX"m4a-audioonly" ) )
-                    p_sys->hacks.es_cat_filters = AUDIO_ES;
-                break;
-            default:
-                msg_Dbg( p_demux,
-                         "unrecognized major media specification (%4.4s).",
-                          (char*)&BOXDATA(p_ftyp)->i_major_brand );
-                break;
-        }
-        /* also lookup in compatibility list */
-        for(uint32_t i=0; i<BOXDATA(p_ftyp)->i_compatible_brands_count; i++)
-        {
-            if (BOXDATA(p_ftyp)->i_compatible_brands[i] == BRAND_dash)
-            {
-                msg_Dbg( p_demux, "DASH Stream" );
-            }
-            else if (BOXDATA(p_ftyp)->i_compatible_brands[i] == BRAND_smoo)
-            {
-                msg_Dbg( p_demux, "Handling VLC Smooth Stream" );
-            }
-        }
-    }
-    else
-    {
-        msg_Dbg( p_demux, "file type box missing (assuming ISO Media)" );
-    }
-
-    /* the file need to have one moov box */
-    p_sys->p_moov = MP4_BoxGet( p_sys->p_root, "/moov" );
-    if( unlikely(!p_sys->p_moov) )
-    {
-        p_sys->p_moov = MP4_BoxGet( p_sys->p_root, "/foov" );
-        if( !p_sys->p_moov )
-        {
-            msg_Err( p_demux, "MP4 plugin discarded (no moov,foov,moof box)" );
-            goto error;
-        }
-        /* we have a free box as a moov, rename it */
-        p_sys->p_moov->i_type = ATOM_moov;
-    }
-
-    p_mvhd = MP4_BoxGet( p_sys->p_moov, "mvhd" );
-    if( p_mvhd && BOXDATA(p_mvhd) && BOXDATA(p_mvhd)->i_timescale )
-    {
-        p_sys->i_timescale = BOXDATA(p_mvhd)->i_timescale;
-        p_sys->i_moov_duration = p_sys->i_duration = BOXDATA(p_mvhd)->i_duration;
-        p_sys->i_cumulated_duration = BOXDATA(p_mvhd)->i_duration;
-    }
-    else
-    {
-        msg_Warn( p_demux, "No valid mvhd found" );
-        goto error;
-    }
-
-    MP4_Box_t *p_rmra = MP4_BoxGet( p_sys->p_root, "/moov/rmra" );
-    if( p_rmra != NULL && p_demux->p_input_item != NULL )
-    {
-        int        i_count = MP4_BoxCount( p_rmra, "rmda" );
-        int        i;
-
-        msg_Dbg( p_demux, "detected playlist mov file (%d ref)", i_count );
-
-        input_item_t *p_current = p_demux->p_input_item;
-
-        input_item_node_t *p_subitems = input_item_node_Create( p_current );
-
-        for( i = 0; i < i_count; i++ )
-        {
-            MP4_Box_t *p_rdrf = MP4_BoxGet( p_rmra, "rmda[%d]/rdrf", i );
-            char      *psz_ref;
-            uint32_t  i_ref_type;
-
-            if( !p_rdrf || !BOXDATA(p_rdrf) || !( psz_ref = strdup( BOXDATA(p_rdrf)->psz_ref ) ) )
-            {
-                continue;
-            }
-            i_ref_type = BOXDATA(p_rdrf)->i_ref_type;
-
-            msg_Dbg( p_demux, "new ref=`%s' type=%4.4s",
-                     psz_ref, (char*)&i_ref_type );
-
-            if( i_ref_type == VLC_FOURCC( 'u', 'r', 'l', ' ' ) )
-            {
-                if( strstr( psz_ref, "qt5gateQT" ) )
-                {
-                    msg_Dbg( p_demux, "ignoring pseudo ref =`%s'", psz_ref );
-                    free( psz_ref );
-                    continue;
-                }
-                if( !strncmp( psz_ref, "http://", 7 ) ||
-                    !strncmp( psz_ref, "rtsp://", 7 ) )
-                {
-                    ;
-                }
-                else
-                {
-                    char *psz_absolute = vlc_uri_resolve( p_demux->psz_url,
-                                                          psz_ref );
-                    free( psz_ref );
-                    if( psz_absolute == NULL )
-                    {
-                        input_item_node_Delete( p_subitems );
-                        return VLC_ENOMEM;
-                    }
-                    psz_ref = psz_absolute;
-                }
-                msg_Dbg( p_demux, "adding ref = `%s'", psz_ref );
-                input_item_t *p_item = input_item_New( psz_ref, NULL );
-                input_item_CopyOptions( p_item, p_current );
-                input_item_node_AppendItem( p_subitems, p_item );
-                input_item_Release( p_item );
-            }
-            else
-            {
-                msg_Err( p_demux, "unknown ref type=%4.4s FIXME (send a bug report)",
-                         (char*)&BOXDATA(p_rdrf)->i_ref_type );
-            }
-            free( psz_ref );
-        }
-
-        /* FIXME: create a stream_filter sub-module for this */
-        if (es_out_Control(p_demux->out, ES_OUT_POST_SUBNODE, p_subitems))
-            input_item_node_Delete(p_subitems);
-    }
-
-    if( !(p_mvhd = MP4_BoxGet( p_sys->p_root, "/moov/mvhd" ) ) )
-    {
-        if( !p_rmra )
-        {
-            msg_Err( p_demux, "cannot find /moov/mvhd" );
-            goto error;
-        }
-        else
-        {
-            msg_Warn( p_demux, "cannot find /moov/mvhd (pure ref file)" );
-            p_demux->pf_demux = DemuxRef;
-            return VLC_SUCCESS;
-        }
-    }
-    else
-    {
-        p_sys->i_timescale = BOXDATA(p_mvhd)->i_timescale;
-        if( p_sys->i_timescale == 0 )
-        {
-            msg_Err( p_this, "bad timescale" );
-            goto error;
-        }
-    }
-
-    const unsigned i_tracks = MP4_BoxCount( p_sys->p_root, "/moov/trak" );
-    if( i_tracks < 1 )
-    {
-        msg_Err( p_demux, "cannot find any /moov/trak" );
-        goto error;
-    }
-    msg_Dbg( p_demux, "found %u track%c", i_tracks, i_tracks ? 's':' ' );
-
-    if( CreateTracks( p_demux, i_tracks ) != VLC_SUCCESS )
-        goto error;
-
-    /* Search the first chap reference (like quicktime) and
-     * check that at least 1 stream is enabled */
-    p_sys->p_tref_chap = NULL;
-    b_enabled_es = false;
-    for( unsigned i = 0; i < p_sys->i_tracks; i++ )
-    {
-        MP4_Box_t *p_trak = MP4_BoxGet( p_sys->p_root, "/moov/trak[%d]", i );
-
-
-        MP4_Box_t *p_tkhd = MP4_BoxGet( p_trak, "tkhd" );
-        if( p_tkhd && BOXDATA(p_tkhd) && (BOXDATA(p_tkhd)->i_flags&MP4_TRACK_ENABLED) )
-            b_enabled_es = true;
-
-        MP4_Box_t *p_chap = MP4_BoxGet( p_trak, "tref/chap", i );
-        if( p_chap && p_chap->data.p_tref_generic &&
-            p_chap->data.p_tref_generic->i_entry_count > 0 && !p_sys->p_tref_chap )
-            p_sys->p_tref_chap = p_chap;
-    }
-
-    /* Set and store metadata */
-    if( (p_sys->p_meta = vlc_meta_New()) )
-        MP4_LoadMeta( p_sys, p_sys->p_meta );
-
-    /* now process each track and extract all useful information */
-    for( unsigned i = 0; i < p_sys->i_tracks; i++ )
-    {
-        MP4_Box_t *p_trak = MP4_BoxGet( p_sys->p_root, "/moov/trak[%u]", i );
-        MP4_TrackSetup( p_demux, &p_sys->track[i], p_trak, true, !b_enabled_es );
-
-        if( p_sys->track[i].b_ok && !p_sys->track[i].b_chapters_source )
-        {
-            const char *psz_cat;
-            switch( p_sys->track[i].fmt.i_cat )
-            {
-                case( VIDEO_ES ):
-                    psz_cat = "video";
-                    break;
-                case( AUDIO_ES ):
-                    psz_cat = "audio";
-                    break;
-                case( SPU_ES ):
-                    psz_cat = "subtitle";
-                    break;
-
-                default:
-                    psz_cat = "unknown";
-                    break;
-            }
-
-            msg_Dbg( p_demux, "adding track[Id 0x%x] %s (%s) language %s",
-                     p_sys->track[i].i_track_ID, psz_cat,
-                     p_sys->track[i].b_enable ? "enable":"disable",
-                     p_sys->track[i].fmt.psz_language ?
-                     p_sys->track[i].fmt.psz_language : "undef" );
-        }
-        else if( p_sys->track[i].b_ok && p_sys->track[i].b_chapters_source )
-        {
-            msg_Dbg( p_demux, "using track[Id 0x%x] for chapter language %s",
-                     p_sys->track[i].i_track_ID,
-                     p_sys->track[i].fmt.psz_language ?
-                     p_sys->track[i].fmt.psz_language : "undef" );
-        }
-        else
-        {
-            msg_Dbg( p_demux, "ignoring track[Id 0x%x]",
-                     p_sys->track[i].i_track_ID );
-        }
-    }
-
-    p_mvex = MP4_BoxGet( p_sys->p_moov, "mvex" );
-    if( p_mvex != NULL )
-    {
-        const MP4_Box_t *p_mehd = MP4_BoxGet( p_mvex, "mehd");
-        if ( p_mehd && BOXDATA(p_mehd) )
-        {
-            if( BOXDATA(p_mehd)->i_fragment_duration > p_sys->i_duration )
-            {
-                p_sys->b_fragmented = true;
-                p_sys->i_duration = BOXDATA(p_mehd)->i_fragment_duration;
-            }
-        }
-
-        const MP4_Box_t *p_sidx = MP4_BoxGet( p_sys->p_root, "sidx");
-        if( p_sidx )
-            p_sys->b_fragmented = true;
-
-        if ( p_sys->b_seekable )
-        {
-            if( !p_sys->b_fragmented /* as unknown */ )
-            {
-                /* Probe remaining to check if there's really fragments
-                   or if that file is just ready to append fragments */
-                ProbeFragments( p_demux, (p_sys->i_duration == 0), &p_sys->b_fragmented );
-            }
-
-            if( vlc_stream_Seek( p_demux->s, p_sys->p_moov->i_pos ) != VLC_SUCCESS )
-                goto error;
-        }
-        else /* Handle as fragmented by default as we can't see moof */
-        {
-            p_sys->context.p_fragment_atom = p_sys->p_moov;
-            p_sys->context.i_current_box_type = ATOM_moov;
-            p_sys->b_fragmented = true;
-        }
-    }
-
-    if( p_sys->b_fragmented )
-    {
-        p_demux->pf_demux = DemuxFrag;
-        msg_Dbg( p_demux, "Set Fragmented demux mode" );
-    }
-
-    if( !p_sys->b_seekable && p_demux->pf_demux == Demux )
-    {
-        msg_Warn( p_demux, "MP4 plugin discarded (not seekable)" );
-        goto error;
-    }
-
-    if( p_sys->i_tracks > 1 && !p_sys->b_fastseekable )
-    {
-        vlc_tick_t i_max_continuity;
-        bool b_flat;
-        MP4_GetInterleaving( p_demux, &i_max_continuity, &b_flat );
-        if( b_flat )
-            msg_Warn( p_demux, "that media doesn't look interleaved, will need to seek");
-        else if( i_max_continuity > DEMUX_TRACK_MAX_PRELOAD )
-            msg_Warn( p_demux, "that media doesn't look properly interleaved, will need to seek");
-    }
-
-    /* */
-    LoadChapter( p_demux );
-
-    p_sys->asfpacketsys.p_demux = p_demux;
-    p_sys->asfpacketsys.pi_preroll = &p_sys->i_preroll;
-    p_sys->asfpacketsys.pi_preroll_start = &p_sys->i_preroll_start;
-    p_sys->asfpacketsys.pf_doskip = NULL;
-    p_sys->asfpacketsys.pf_send = MP4ASF_Send;
-    p_sys->asfpacketsys.pf_gettrackinfo = MP4ASF_GetTrackInfo;
-    p_sys->asfpacketsys.pf_updatetime = NULL;
-    p_sys->asfpacketsys.pf_setaspectratio = NULL;
+     p_sys->first_demux = 1;
+     p_demux->p_sys = p_sys;
 
     return VLC_SUCCESS;
 
-error:
-    if( vlc_stream_Tell( p_demux->s ) > 0 )
-    {
-        if( vlc_stream_Seek( p_demux->s, 0 ) != VLC_SUCCESS )
-            msg_Warn( p_demux, "Can't reset stream position from probing" );
-    }
 
-    Close( p_this );
-
-    return VLC_EGENERIC;
 }
 
 const unsigned int SAMPLEHEADERSIZE = 4;
@@ -1490,7 +1101,433 @@ static int DemuxMoov( demux_t *p_demux )
 
 static int Demux( demux_t *p_demux )
 {
+
     demux_sys_t *p_sys = p_demux->p_sys;
+
+    if(p_sys->first_demux) {
+
+        const uint8_t   *p_peek;
+
+        MP4_Box_t       *p_ftyp;
+        const MP4_Box_t *p_mvhd = NULL;
+        const MP4_Box_t *p_mvex = NULL;
+
+        bool      b_enabled_es;
+
+    	///huge copy and paste warning!!!!
+
+    	 //put this in our first read
+    	    /* A little test to see if it could be a mp4 */
+    	    if( vlc_stream_Peek( p_demux->s, &p_peek, 12 ) < 12 ) {
+    	        msg_Dbg( p_demux, "mp4.c: peek failed at line %d", __LINE__ );
+
+    	    	return VLC_EGENERIC;
+    	    }
+
+	        msg_Dbg( p_demux, "mp4.c: peek looks like \n0x%X 0x%X 0x%X 0x%X     0x%X 0x%X 0x%X 0x%X\n0x%X 0x%X 0x%X 0x%X",
+	        		p_peek[0], p_peek[1],p_peek[2], p_peek[3],
+					p_peek[4], p_peek[5],p_peek[6], p_peek[7],
+					p_peek[8], p_peek[9],p_peek[10], p_peek[11]					);
+
+
+    	    switch( VLC_FOURCC( p_peek[4], p_peek[5], p_peek[6], p_peek[7] ) )
+    	    {
+    	        case ATOM_moov:
+    	        case ATOM_foov:
+    	        case ATOM_moof:
+    	        case ATOM_mdat:
+    	        case ATOM_udta:
+    	        case ATOM_free:
+    	        case ATOM_skip:
+    	        case ATOM_wide:
+    	        case ATOM_uuid:
+    	        case VLC_FOURCC( 'p', 'n', 'o', 't' ):
+    	            break;
+    	        case ATOM_ftyp:
+    	        {
+    	            /* Early handle some brands */
+    	            switch( VLC_FOURCC(p_peek[8], p_peek[9], p_peek[10], p_peek[11]) )
+    	            {
+    	                /* HEIF pictures goes to heif demux */
+    	                case BRAND_heic:
+    	                case BRAND_heix:
+    	                case BRAND_mif1:
+    	                case BRAND_jpeg:
+    	                case BRAND_avci:
+    	                case BRAND_avif:
+    	                /* We don't yet support f4v, but avformat does. */
+    	                case BRAND_f4v:
+    	                    return VLC_EGENERIC;
+    	                default:
+    	                    break;
+    	            }
+    	            break;
+    	        }
+    	         default:
+    	        	    msg_Dbg( p_demux, "mp4.c: fourcc peek failed at line: %d", __LINE__ );
+
+    	            return VLC_EGENERIC;
+    	    }
+
+    	    /* create our structure that will contains all data */
+
+    	    /* I need to seek */
+    	    vlc_stream_Control( p_demux->s, STREAM_CAN_SEEK, &p_sys->b_seekable );
+    	    if( p_sys->b_seekable )
+    	        vlc_stream_Control( p_demux->s, STREAM_CAN_FASTSEEK, &p_sys->b_fastseekable );
+
+
+
+    	    //TODO - do this later when you have a
+    	    if( LoadInitFrag( p_demux ) != VLC_SUCCESS )
+    	        goto error;
+
+    	    MP4_BoxDumpStructure( p_demux->s, p_sys->p_root );
+
+    	    msg_Dbg( p_demux, "mp4.c: doing box type dump %d", __LINE__ );
+
+    	    if( ( p_ftyp = MP4_BoxGet( p_sys->p_root, "/ftyp" ) ) )
+    	    {
+    	        switch( BOXDATA(p_ftyp)->i_major_brand )
+    	        {
+    	            case BRAND_isom:
+    	                msg_Dbg( p_demux,
+    	                         "ISO Media (isom) version %d.",
+    	                         BOXDATA(p_ftyp)->i_minor_version );
+    	                break;
+    	            case BRAND_3gp4:
+    	            case BRAND_3gp5:
+    	            case BRAND_3gp6:
+    	            case BRAND_3gp7:
+    	                msg_Dbg( p_demux, "3GPP Media Release: %4.4s",
+    	                         (char *)&BOXDATA(p_ftyp)->i_major_brand );
+    	                break;
+    	            case BRAND_qt__:
+    	                msg_Dbg( p_demux, "Apple QuickTime media" );
+    	                break;
+    	            case BRAND_isml:
+    	                msg_Dbg( p_demux, "PIFF (= isml = fMP4) media" );
+    	                break;
+    	            case BRAND_dash:
+    	                msg_Dbg( p_demux, "DASH Stream" );
+    	                break;
+    	            case BRAND_M4A:
+    	                msg_Dbg( p_demux, "iTunes audio" );
+    	                if( var_InheritBool( p_demux, CFG_PREFIX"m4a-audioonly" ) )
+    	                    p_sys->hacks.es_cat_filters = AUDIO_ES;
+    	                break;
+    	            default:
+    	                msg_Dbg( p_demux,
+    	                         "unrecognized major media specification (%4.4s).",
+    	                          (char*)&BOXDATA(p_ftyp)->i_major_brand );
+    	                break;
+    	        }
+    	        /* also lookup in compatibility list */
+    	        for(uint32_t i=0; i<BOXDATA(p_ftyp)->i_compatible_brands_count; i++)
+    	        {
+    	            if (BOXDATA(p_ftyp)->i_compatible_brands[i] == BRAND_dash)
+    	            {
+    	                msg_Dbg( p_demux, "DASH Stream" );
+    	            }
+    	            else if (BOXDATA(p_ftyp)->i_compatible_brands[i] == BRAND_smoo)
+    	            {
+    	                msg_Dbg( p_demux, "Handling VLC Smooth Stream" );
+    	            }
+    	        }
+    	    }
+    	    else
+    	    {
+    	        msg_Dbg( p_demux, "file type box missing (assuming ISO Media)" );
+    	    }
+
+    	    /* the file need to have one moov box */
+    	    p_sys->p_moov = MP4_BoxGet( p_sys->p_root, "/moov" );
+    	    if( unlikely(!p_sys->p_moov) )
+    	    {
+    	        p_sys->p_moov = MP4_BoxGet( p_sys->p_root, "/foov" );
+    	        if( !p_sys->p_moov )
+    	        {
+    	            msg_Err( p_demux, "MP4 plugin discarded (no moov,foov,moof box)" );
+    	            goto error;
+    	        }
+    	        /* we have a free box as a moov, rename it */
+    	        p_sys->p_moov->i_type = ATOM_moov;
+    	    }
+
+    	    p_mvhd = MP4_BoxGet( p_sys->p_moov, "mvhd" );
+    	    if( p_mvhd && BOXDATA(p_mvhd) && BOXDATA(p_mvhd)->i_timescale )
+    	    {
+    	        p_sys->i_timescale = BOXDATA(p_mvhd)->i_timescale;
+    	        p_sys->i_moov_duration = p_sys->i_duration = BOXDATA(p_mvhd)->i_duration;
+    	        p_sys->i_cumulated_duration = BOXDATA(p_mvhd)->i_duration;
+    	    }
+    	    else
+    	    {
+    	        msg_Warn( p_demux, "No valid mvhd found" );
+    	        goto error;
+    	    }
+
+    	    MP4_Box_t *p_rmra = MP4_BoxGet( p_sys->p_root, "/moov/rmra" );
+    	    if( p_rmra != NULL && p_demux->p_input_item != NULL )
+    	    {
+    	        int        i_count = MP4_BoxCount( p_rmra, "rmda" );
+    	        int        i;
+
+    	        msg_Dbg( p_demux, "detected playlist mov file (%d ref)", i_count );
+
+    	        input_item_t *p_current = p_demux->p_input_item;
+
+    	        input_item_node_t *p_subitems = input_item_node_Create( p_current );
+
+    	        for( i = 0; i < i_count; i++ )
+    	        {
+    	            MP4_Box_t *p_rdrf = MP4_BoxGet( p_rmra, "rmda[%d]/rdrf", i );
+    	            char      *psz_ref;
+    	            uint32_t  i_ref_type;
+
+    	            if( !p_rdrf || !BOXDATA(p_rdrf) || !( psz_ref = strdup( BOXDATA(p_rdrf)->psz_ref ) ) )
+    	            {
+    	                continue;
+    	            }
+    	            i_ref_type = BOXDATA(p_rdrf)->i_ref_type;
+
+    	            msg_Dbg( p_demux, "new ref=`%s' type=%4.4s",
+    	                     psz_ref, (char*)&i_ref_type );
+
+    	            if( i_ref_type == VLC_FOURCC( 'u', 'r', 'l', ' ' ) )
+    	            {
+    	                if( strstr( psz_ref, "qt5gateQT" ) )
+    	                {
+    	                    msg_Dbg( p_demux, "ignoring pseudo ref =`%s'", psz_ref );
+    	                    free( psz_ref );
+    	                    continue;
+    	                }
+    	                if( !strncmp( psz_ref, "http://", 7 ) ||
+    	                    !strncmp( psz_ref, "rtsp://", 7 ) )
+    	                {
+    	                    ;
+    	                }
+    	                else
+    	                {
+    	                    char *psz_absolute = vlc_uri_resolve( p_demux->psz_url,
+    	                                                          psz_ref );
+    	                    free( psz_ref );
+    	                    if( psz_absolute == NULL )
+    	                    {
+    	                        input_item_node_Delete( p_subitems );
+    	                        return VLC_ENOMEM;
+    	                    }
+    	                    psz_ref = psz_absolute;
+    	                }
+    	                msg_Dbg( p_demux, "adding ref = `%s'", psz_ref );
+    	                input_item_t *p_item = input_item_New( psz_ref, NULL );
+    	                input_item_CopyOptions( p_item, p_current );
+    	                input_item_node_AppendItem( p_subitems, p_item );
+    	                input_item_Release( p_item );
+    	            }
+    	            else
+    	            {
+    	                msg_Err( p_demux, "unknown ref type=%4.4s FIXME (send a bug report)",
+    	                         (char*)&BOXDATA(p_rdrf)->i_ref_type );
+    	            }
+    	            free( psz_ref );
+    	        }
+
+    	        /* FIXME: create a stream_filter sub-module for this */
+    	        if (es_out_Control(p_demux->out, ES_OUT_POST_SUBNODE, p_subitems))
+    	            input_item_node_Delete(p_subitems);
+    	    }
+
+    	    if( !(p_mvhd = MP4_BoxGet( p_sys->p_root, "/moov/mvhd" ) ) )
+    	    {
+    	        if( !p_rmra )
+    	        {
+    	            msg_Err( p_demux, "cannot find /moov/mvhd" );
+    	            goto error;
+    	        }
+    	        else
+    	        {
+    	            msg_Warn( p_demux, "cannot find /moov/mvhd (pure ref file)" );
+    	            p_demux->pf_demux = DemuxRef;
+    	            return VLC_SUCCESS;
+    	        }
+    	    }
+    	    else
+    	    {
+    	        p_sys->i_timescale = BOXDATA(p_mvhd)->i_timescale;
+    	        if( p_sys->i_timescale == 0 )
+    	        {
+    	            msg_Err( p_demux, "bad timescale" );
+    	            goto error;
+    	        }
+    	    }
+
+    	    const unsigned i_tracks = MP4_BoxCount( p_sys->p_root, "/moov/trak" );
+    	    if( i_tracks < 1 )
+    	    {
+    	        msg_Err( p_demux, "cannot find any /moov/trak" );
+    	        goto error;
+    	    }
+    	    msg_Dbg( p_demux, "found %u track%c", i_tracks, i_tracks ? 's':' ' );
+
+    	    if( CreateTracks( p_demux, i_tracks ) != VLC_SUCCESS )
+    	        goto error;
+
+    	    /* Search the first chap reference (like quicktime) and
+    	     * check that at least 1 stream is enabled */
+    	    p_sys->p_tref_chap = NULL;
+    	    b_enabled_es = false;
+    	    for( unsigned i = 0; i < p_sys->i_tracks; i++ )
+    	    {
+    	        MP4_Box_t *p_trak = MP4_BoxGet( p_sys->p_root, "/moov/trak[%d]", i );
+
+
+    	        MP4_Box_t *p_tkhd = MP4_BoxGet( p_trak, "tkhd" );
+    	        if( p_tkhd && BOXDATA(p_tkhd) && (BOXDATA(p_tkhd)->i_flags&MP4_TRACK_ENABLED) )
+    	            b_enabled_es = true;
+
+    	        MP4_Box_t *p_chap = MP4_BoxGet( p_trak, "tref/chap", i );
+    	        if( p_chap && p_chap->data.p_tref_generic &&
+    	            p_chap->data.p_tref_generic->i_entry_count > 0 && !p_sys->p_tref_chap )
+    	            p_sys->p_tref_chap = p_chap;
+    	    }
+
+    	    /* Set and store metadata */
+    	    if( (p_sys->p_meta = vlc_meta_New()) )
+    	        MP4_LoadMeta( p_sys, p_sys->p_meta );
+
+    	    /* now process each track and extract all useful information */
+    	    for( unsigned i = 0; i < p_sys->i_tracks; i++ )
+    	    {
+    	        MP4_Box_t *p_trak = MP4_BoxGet( p_sys->p_root, "/moov/trak[%u]", i );
+    	        MP4_TrackSetup( p_demux, &p_sys->track[i], p_trak, true, !b_enabled_es );
+
+    	        if( p_sys->track[i].b_ok && !p_sys->track[i].b_chapters_source )
+    	        {
+    	            const char *psz_cat;
+    	            switch( p_sys->track[i].fmt.i_cat )
+    	            {
+    	                case( VIDEO_ES ):
+    	                    psz_cat = "video";
+    	                    break;
+    	                case( AUDIO_ES ):
+    	                    psz_cat = "audio";
+    	                    break;
+    	                case( SPU_ES ):
+    	                    psz_cat = "subtitle";
+    	                    break;
+
+    	                default:
+    	                    psz_cat = "unknown";
+    	                    break;
+    	            }
+
+    	            msg_Dbg( p_demux, "adding track[Id 0x%x] %s (%s) language %s",
+    	                     p_sys->track[i].i_track_ID, psz_cat,
+    	                     p_sys->track[i].b_enable ? "enable":"disable",
+    	                     p_sys->track[i].fmt.psz_language ?
+    	                     p_sys->track[i].fmt.psz_language : "undef" );
+    	        }
+    	        else if( p_sys->track[i].b_ok && p_sys->track[i].b_chapters_source )
+    	        {
+    	            msg_Dbg( p_demux, "using track[Id 0x%x] for chapter language %s",
+    	                     p_sys->track[i].i_track_ID,
+    	                     p_sys->track[i].fmt.psz_language ?
+    	                     p_sys->track[i].fmt.psz_language : "undef" );
+    	        }
+    	        else
+    	        {
+    	            msg_Dbg( p_demux, "ignoring track[Id 0x%x]",
+    	                     p_sys->track[i].i_track_ID );
+    	        }
+    	    }
+
+    	    p_mvex = MP4_BoxGet( p_sys->p_moov, "mvex" );
+    	    if( p_mvex != NULL )
+    	    {
+    	        const MP4_Box_t *p_mehd = MP4_BoxGet( p_mvex, "mehd");
+    	        if ( p_mehd && BOXDATA(p_mehd) )
+    	        {
+    	            if( BOXDATA(p_mehd)->i_fragment_duration > p_sys->i_duration )
+    	            {
+    	                p_sys->b_fragmented = true;
+    	                p_sys->i_duration = BOXDATA(p_mehd)->i_fragment_duration;
+    	            }
+    	        }
+
+    	        const MP4_Box_t *p_sidx = MP4_BoxGet( p_sys->p_root, "sidx");
+    	        if( p_sidx )
+    	            p_sys->b_fragmented = true;
+
+    	        if ( p_sys->b_seekable )
+    	        {
+    	            if( !p_sys->b_fragmented /* as unknown */ )
+    	            {
+    	                /* Probe remaining to check if there's really fragments
+    	                   or if that file is just ready to append fragments */
+    	                ProbeFragments( p_demux, (p_sys->i_duration == 0), &p_sys->b_fragmented );
+    	            }
+
+    	            if( vlc_stream_Seek( p_demux->s, p_sys->p_moov->i_pos ) != VLC_SUCCESS )
+    	                goto error;
+    	        }
+    	        else /* Handle as fragmented by default as we can't see moof */
+    	        {
+    	            p_sys->context.p_fragment_atom = p_sys->p_moov;
+    	            p_sys->context.i_current_box_type = ATOM_moov;
+    	            p_sys->b_fragmented = true;
+    	        }
+    	    }
+
+    	    if( p_sys->b_fragmented )
+    	    {
+    	        p_demux->pf_demux = DemuxFrag;
+    	        msg_Dbg( p_demux, "Set Fragmented demux mode" );
+    	    }
+
+    	    if( !p_sys->b_seekable && p_demux->pf_demux == Demux )
+    	    {
+    	        msg_Warn( p_demux, "MP4 plugin discarded (not seekable)" );
+    	        goto error;
+    	    }
+
+    	    if( p_sys->i_tracks > 1 && !p_sys->b_fastseekable )
+    	    {
+    	        vlc_tick_t i_max_continuity;
+    	        bool b_flat;
+    	        MP4_GetInterleaving( p_demux, &i_max_continuity, &b_flat );
+    	        if( b_flat )
+    	            msg_Warn( p_demux, "that media doesn't look interleaved, will need to seek");
+    	        else if( i_max_continuity > DEMUX_TRACK_MAX_PRELOAD )
+    	            msg_Warn( p_demux, "that media doesn't look properly interleaved, will need to seek");
+    	    }
+
+    	    /* */
+    	    LoadChapter( p_demux );
+
+    	    p_sys->asfpacketsys.p_demux = p_demux;
+    	    p_sys->asfpacketsys.pi_preroll = &p_sys->i_preroll;
+    	    p_sys->asfpacketsys.pi_preroll_start = &p_sys->i_preroll_start;
+    	    p_sys->asfpacketsys.pf_doskip = NULL;
+    	    p_sys->asfpacketsys.pf_send = MP4ASF_Send;
+    	    p_sys->asfpacketsys.pf_gettrackinfo = MP4ASF_GetTrackInfo;
+    	    p_sys->asfpacketsys.pf_updatetime = NULL;
+    	    p_sys->asfpacketsys.pf_setaspectratio = NULL;
+
+    		msg_Dbg( p_demux, "mp4.c: open complete %d", __LINE__ );
+
+
+    	///end huge copy and paste warning!!@!
+    		p_sys->first_demux = 0;
+    }
+
+
+
+
+
+
+
+
 
     assert( ! p_sys->b_fragmented );
 
@@ -1499,7 +1536,16 @@ static int Demux( demux_t *p_demux )
     if( i_status == VLC_DEMUXER_EOS )
         i_status = VLC_DEMUXER_EOF;
 
+	msg_Dbg( p_demux, "mp4.c: demux done, returning %d", i_status);
+
     return i_status;
+
+	error:
+
+    	msg_Dbg( p_demux, "mp4.c: error, returning ok at line %d", __LINE__ );
+
+    return VLC_SUCCESS;
+
 }
 
 static void MP4_UpdateSeekpoint( demux_t *p_demux, vlc_tick_t i_time )

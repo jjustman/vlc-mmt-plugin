@@ -93,7 +93,7 @@ vlc_module_begin ()
     set_category( CAT_INPUT )
     set_subcategory( SUBCAT_INPUT_DEMUX )
     set_description( N_("MMTP Demuxer") )
-    set_capability( "demux", 20 )
+    set_capability( "demux", 500 )
   //  add_module("demuxdump-access", "sout access", "file",
   //            ACCESS_TEXT, ACCESS_TEXT)
   //  add_savefile("demuxdump-file", "stream-demux.dump",
@@ -105,6 +105,8 @@ vlc_module_begin ()
 vlc_module_end ()
 
 
+void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment );
+
 //short reads from UDP may happen on starutp buffering or truncation
 #define MIN_MMTP_SIZE 224
 #define MAX_MMTP_SIZE 1514
@@ -115,6 +117,7 @@ static int Control( demux_t *, int,va_list );
 typedef struct  {
 	//reconsititue mfu's into a p_out_muxed fifo
 	block_t *p_mpu_block;
+    vlc_thread_t  thread;
 
 	vlc_demux_chained_t *p_out_muxed;
 } demux_sys_t;
@@ -298,12 +301,6 @@ static int Open( vlc_object_t * p_this )
     demux_t *p_demux = (demux_t*)p_this;
     demux_sys_t *p_sys = NULL;
 
-    /**
-     * peek our first quad
-     */
-
-    const uint8_t *mmtpFirstQuad;
-
     //bail if we have a short read, e.g. less than 4 bytes
 //
 //    if(vlc_stream_Peek( p_demux->s, &mmtpFirstQuad, 4) < 4 ) {
@@ -330,11 +327,12 @@ static int Open( vlc_object_t * p_this )
 
     //configure a m_fifo for when we have re-constituted MFU into MPU's to handoff to vlc_demux_chained_New
     //push down a new demux chain for the isobmff handoff
+    //also vlc_demux_chained_Thread -?
+    msg_Info(p_demux, "creating chained mp4 demuxer");
 
-    msg_Info(p_demux, "creating chaned mp4 demuxer");
     p_sys->p_out_muxed = vlc_demux_chained_New( VLC_OBJECT(p_demux), "mp4", p_demux->out );
+  //  vlc_clone (&p_sys->thread, Demux, p_demux, VLC_THREAD_PRIORITY_INPUT);
     msg_Info(p_demux, "mmtp_demuxer.open() - complete, ref at %p", (void*) p_sys->p_out_muxed);
-
 
     return  VLC_SUCCESS;
 }
@@ -521,12 +519,12 @@ static int Demux( demux_t *p_demux )
 			return VLC_DEMUXER_SUCCESS;
 	    }
 
-	    uint8_t  mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
+	    uint16_t  mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
 	    uint32_t mmtp_timestamp 		= mmtp_packet_preamble[4]  << 24 | mmtp_packet_preamble[5]  << 16 | mmtp_packet_preamble[6]   << 8 | mmtp_packet_preamble[7];
 	    uint32_t packet_sequence_number = mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
 	    uint32_t packet_counter 		= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
 
-		msg_Dbg( p_demux, "packet version: %d, payload_type: 0x%X, packet_id: 0x%X, timestamp: 0x%X, packet_sequence_number: 0x%X, packet_counter: 0x%X", mmtp_packet_version,
+		msg_Dbg( p_demux, "packet version: %d, payload_type: 0x%X, packet_id 0x%hu, timestamp: 0x%X, packet_sequence_number: 0x%X, packet_counter: 0x%X", mmtp_packet_version,
 				mmtp_payload_type, mmtp_packet_id, mmtp_timestamp, packet_sequence_number, packet_counter);
 
 		//if our header extension length is set, then block extract the header extension length, adn we should be at our payload data
@@ -553,16 +551,14 @@ static int Demux( demux_t *p_demux )
 	    	mpu_payload_length = (mpu_payload_length_block[0] << 8) | mpu_payload_length_block[1];
 			msg_Warn( p_demux, "mmtp_demuxer - doing mpu_payload_length: %hu (0x%X 0x%X)",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1]);
 
-
-
 	    	uint8_t mpu_fragmentation_info;
 			msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
 	    	buf = extract(buf, &mpu_fragmentation_info, 1);
 
-	    	uint8_t mpu_fragment_type = mpu_fragmentation_info & 0xF0 >> 4;
-	    	uint8_t mpu_timed_flag = mpu_fragmentation_info & 0x8 >> 3;
-	    	uint8_t mpu_fragmentation_indicator = mpu_fragmentation_info & 0x6 >> 1;
-	    	uint8_t mpu_aggregation_flag = mpu_fragmentation_info & 0x01;
+	    	uint8_t mpu_fragment_type = (mpu_fragmentation_info & 0xF0) >> 4;
+	    	uint8_t mpu_timed_flag = (mpu_fragmentation_info & 0x8) >> 3;
+	    	uint8_t mpu_fragmentation_indicator = (mpu_fragmentation_info & 0x6) >> 1;
+	    	uint8_t mpu_aggregation_flag = (mpu_fragmentation_info & 0x1);
 
 	    	uint8_t mpu_fragmentation_counter;
 			msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
@@ -578,99 +574,142 @@ static int Demux( demux_t *p_demux )
 			mpu_sequence_number = (mpu_sequence_number_block[0] << 24)  | (mpu_sequence_number_block[1] <<16) | (mpu_sequence_number_block[2] << 8) | (mpu_sequence_number_block[3]);
     	    msg_Info(p_demux, "mpu_sequence_number: %d", mpu_sequence_number);
 
-	    	uint8_t data_unit_length_block[2];
 	    	uint16_t data_unit_length = 0;
-	    	buf = extract(buf, &data_unit_length_block, 2);
-	    	data_unit_length = (data_unit_length_block[0] << 8) | (data_unit_length_block[1]);
-    	    msg_Info(p_demux, "data_unit_length: %d", data_unit_length);
+ 	    	int remainingPacketLen = -1;
 
-    	    //parse data unit header here based upon mpu timed flag
-    	    if(mpu_timed_flag) {
-    	    	//112 bits in aggregate, 14 bytes
-    	    	uint8_t timed_mfu_block[14];
-    	    	buf = extract(buf, &timed_mfu_block, 14);
+	    	do {
+				//pull out aggregate packets data unit length
+	    		int to_read_packet_length = -1;
+	    		//mpu_fragment_type
 
-    	    	uint32_t movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
-    	    	uint32_t sample_numnber 				= (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
-    	    	uint32_t offset 						= (timed_mfu_block[8] << 24) | (timed_mfu_block[9] << 16) | (timed_mfu_block[10] << 8) | (timed_mfu_block[11]);
-    	    	uint8_t priority 						= timed_mfu_block[12];
-    	    	uint8_t dep_counter						= timed_mfu_block[13];
+				if(mpu_aggregation_flag) {
+					uint8_t data_unit_length_block[2];
+					buf = extract(buf, &data_unit_length_block, 2);
+					data_unit_length = (data_unit_length_block[0] << 8) | (data_unit_length_block[1]);
+					msg_Info(p_demux, "mpu_aggregation_flag:1, data_unit_length: %d", data_unit_length);
+					to_read_packet_length = data_unit_length;
+				} else {
+					to_read_packet_length = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
+				}
 
-    	    	msg_Info(p_demux, "mpu mode -timed MFU, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
-    	    			movie_fragment_sequence_number, sample_numnber, offset, priority, dep_counter);
-    	    } else {
-    	    	//only 32 bits
-    	    	uint8_t non_timed_mfu_block[4];
-    	    	uint32_t non_timed_mfu_item_id;
-    	       	buf = extract(buf, &non_timed_mfu_block, 4);
-    	       	non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
-    	    	msg_Info(p_demux, "mpu mode - non-timed MFU, item_id is: %zu", non_timed_mfu_item_id);
+				if(mpu_fragment_type != 0x2) {
+					//read
+					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
+					buf = extract(buf, tmp_mpu_fragment->p_buffer, data_unit_length);
+					tmp_mpu_fragment->i_buffer = data_unit_length;
+					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
+					remainingPacketLen = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
 
-    	    }
+				} else {
+					//we use the du_header field
+					//parse data unit header here based upon mpu timed flag
+					if(mpu_timed_flag) {
+						//112 bits in aggregate, 14 bytes
+						uint8_t timed_mfu_block[14];
+						extract(buf, &timed_mfu_block, 14); //dont re-position buffer, treat this as a "peek"
 
-    	    if(!data_unit_length) {
-    	    	//recompute data unit length based upon buf pos differences
-    	    	msg_Info(p_demux, "mpu mode - buf: %p, raw_buf: %p", (void*)buf, (void*)raw_buf);
+						uint32_t movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
+						uint32_t sample_numnber 				= (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
+						uint32_t offset 						= (timed_mfu_block[8] << 24) | (timed_mfu_block[9] << 16) | (timed_mfu_block[10] << 8) | (timed_mfu_block[11]);
+						uint8_t priority 						= timed_mfu_block[12];
+						uint8_t dep_counter						= timed_mfu_block[13];
 
-    	    	data_unit_length  = mmtp_raw_packet_size - ((buf - raw_buf) * 8);
-    	    	msg_Info(p_demux, "mpu mode - data unit length value is 0, using remaining pkt buffer for size, computed: %d", data_unit_length);
-    	    } else {
-    	    	msg_Info(p_demux, "mpu mode - data unit length: %hu", data_unit_length);
-    	    }
+						msg_Info(p_demux, "mpu mode -timed MFU, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
+								movie_fragment_sequence_number, sample_numnber, offset, priority, dep_counter);
+					} else {
+						//only 32 bits
+						uint8_t non_timed_mfu_block[4];
+						uint32_t non_timed_mfu_item_id;
+						buf = extract(buf, &non_timed_mfu_block, 4);
+						non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
+						msg_Info(p_demux, "mpu mode - non-timed MFU, item_id is: %zu", non_timed_mfu_item_id);
+					}
 
-	    	block_t *tmp_mpu_fragment = block_Alloc(data_unit_length);
-	    	buf = extract(buf, tmp_mpu_fragment->p_buffer, data_unit_length);
-	    	tmp_mpu_fragment->i_buffer = data_unit_length;
+					msg_Dbg( p_demux, "before reading fragment packet:  %p", (void*)p_sys->p_mpu_block);
 
-    	    msg_Info(p_demux, "mpu_fragmentation_indicator = %d", mpu_fragmentation_indicator);
+					block_t *tmp_mpu_fragment = block_Alloc(data_unit_length);
+					buf = extract(buf, tmp_mpu_fragment->p_buffer, data_unit_length);
+					tmp_mpu_fragment->i_buffer = data_unit_length;
+					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
+					remainingPacketLen = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
 
-    	    //TODO: merge into proper packet_id's
+				}
 
-	    	if(mpu_fragmentation_indicator == 0) {
-	    	    msg_Info(p_demux, "mpu_fragmentation_indicator = 0, pushing tmp_mpu_fragement to fifo");
-
-		    	//push to fifo
-	    		vlc_demux_chained_Send(p_sys->p_out_muxed, tmp_mpu_fragment);
-	    		block_Release(tmp_mpu_fragment);
-
-	    	} else if(mpu_fragmentation_indicator == 1) {
-	    		//start of a new packet
-	    		if(p_sys->p_mpu_block) {
-	    	        msg_Err(p_demux, " fragmentation_indicator is 1 but p_sys->p_mpu_block not null?");
-		    		vlc_demux_chained_Send(p_sys->p_out_muxed, p_sys->p_mpu_block);
-	    		} else {
-		    	    msg_Info(p_demux, "appending - mpu_fragmentation_indicator == 1");
-	    		}
-		    	p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
-
-	    	} else if (mpu_fragmentation_indicator == 2) {
-	    		//middle of fragment, but must drop if we don't have a p_mpu_block pending
-	    		if(p_sys->p_mpu_block) {
-	    			block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
-	    			msg_Info(p_demux, "appending - mpu_fragmentation_indicator == 2");
-	    		} else {
-	    			msg_Warn(p_demux, "DROPPING mpu_fragmentation_indicator==2 but no active p_mpu_block");
-	    		}
-	    	} else if(mpu_fragmentation_indicator == 3) {
-	    		if(p_sys->p_mpu_block) {
-	    			block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
-	    			//append and gather and push - completion of fragment, push to fifo
-	    			vlc_demux_chained_Send(p_sys->p_out_muxed, block_ChainGather(p_sys->p_mpu_block));
-	    			//block_chainGather will release
-	    			p_sys->p_mpu_block = NULL;
-	    		} else {
-	    			msg_Warn(p_demux, "DROPPING mpu_fragmentation_indicator==3 but no active p_mpu_block");
-	    		}
-	    	}
+	    	} while(mpu_aggregation_flag && remainingPacketLen);
 
 	    }
 
 	}
 
-
-
-
 	return VLC_DEMUXER_SUCCESS;
+}
+static int lastPacketId = -1;
+void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment ) {
+
+    demux_sys_t *p_sys = p_demux->p_sys;
+    //if we have a new packet id, assume we can send the current payload off
+    if(mmtp_packet_id >= lastPacketId) {
+    	//send off if we have a pending mpu block
+    	if(p_sys->p_mpu_block) {
+    		msg_Info(p_demux, "sending p_mpu_block to chained decoder");
+
+			vlc_demux_chained_Send(p_sys->p_out_muxed, p_sys->p_mpu_block);
+			unsigned update = 1;
+			vlc_demux_chained_Control(p_sys->p_out_muxed, DEMUX_TEST_AND_CLEAR_FLAGS, &update);
+
+    	}
+		msg_Info(p_demux, "creating new p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
+
+		p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
+	    lastPacketId = mmtp_packet_id;
+
+    } else {
+		msg_Info(p_demux, "appending new p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
+
+    	//append
+		block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
+
+    }
+    return;
+
+	if(mpu_fragmentation_indicator == 0) {
+		msg_Info(p_demux, "mpu_fragmentation_indicator = 0, pushing tmp_mpu_fragement to fifo");
+
+		//push to fifo
+		vlc_demux_chained_Send(p_sys->p_out_muxed, tmp_mpu_fragment);
+
+	//		block_Release(tmp_mpu_fragment);
+
+	} else if(mpu_fragmentation_indicator == 1) {
+		//start of a new packet
+		if(p_sys->p_mpu_block) {
+			msg_Err(p_demux, " fragmentation_indicator is 1 but p_sys->p_mpu_block not null?");
+			vlc_demux_chained_Send(p_sys->p_out_muxed, block_ChainGather(p_sys->p_mpu_block));
+		} else {
+			msg_Info(p_demux, "appending - mpu_fragmentation_indicator == 1");
+		}
+		p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
+
+	} else if (mpu_fragmentation_indicator == 2) {
+		//middle of fragment, but must drop if we don't have a p_mpu_block pending
+		if(p_sys->p_mpu_block) {
+			block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
+			msg_Info(p_demux, "appending - mpu_fragmentation_indicator == 2");
+		} else {
+			msg_Warn(p_demux, "DROPPING mpu_fragmentation_indicator==2 but no active p_mpu_block");
+		}
+	} else if(mpu_fragmentation_indicator == 3) {
+		if(p_sys->p_mpu_block) {
+			block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
+			//append and gather and push - completion of fragment, push to fifo
+			vlc_demux_chained_Send(p_sys->p_out_muxed, block_ChainGather(p_sys->p_mpu_block));
+			//block_chainGather will release
+			p_sys->p_mpu_block = NULL;
+		} else {
+			msg_Warn(p_demux, "DROPPING mpu_fragmentation_indicator==3 but no active p_mpu_block");
+		}
+	}
+
 
 }
 
