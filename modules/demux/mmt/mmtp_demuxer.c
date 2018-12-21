@@ -70,6 +70,8 @@ sudo route -nv add -net 224.0.0.0/4 -interface vnic1
 # include "config.h"
 #endif
 
+#include <limits.h>
+
 #include <vlc_common.h>
 #include <vlc_plugin.h>
 #include <vlc_demux.h>
@@ -654,7 +656,7 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
     		msg_Info(p_demux, "sending p_mpu_block to chained decoder");
 
 			vlc_demux_chained_Send(p_sys->p_out_muxed, p_sys->p_mpu_block);
-			unsigned update = 1;
+			unsigned update = UINT_MAX;
 			vlc_demux_chained_Control(p_sys->p_out_muxed, DEMUX_TEST_AND_CLEAR_FLAGS, &update);
 
     	}
@@ -734,9 +736,6 @@ static int Control( demux_t *p_demux, int i_query, va_list args )
             *pb = false;
             break;
 
-        	pb = va_arg( args, bool * );
-            *pb = false;
-            break;
 
         case DEMUX_GET_PTS_DELAY:
         	return VLC_EGENERIC;
@@ -762,6 +761,12 @@ static int Control( demux_t *p_demux, int i_query, va_list args )
         case DEMUX_GET_ATTACHMENTS:
         	return VLC_EGENERIC;
         	break;
+//
+//        case DEMUX_TEST_AND_CLEAR_FLAGS:
+//        	unsigned *flags = va_arg(args, unsigned *);
+//            flags = 1;
+//        	break;
+
     }
 
     return VLC_SUCCESS; //demux_vaControlHelper( p_demux->s, 0, -1, 0, 1, i_query, args );
