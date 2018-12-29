@@ -55,6 +55,9 @@ static void *vlc_demux_chained_Thread(void *data)
     vlc_demux_chained_t *dc = data;
     demux_t *demux = demux_New(VLC_OBJECT(dc->fifo), dc->name, dc->fifo,
                                dc->out);
+
+    printf("opening chained demuxer");
+
     if (demux == NULL)
     {
         vlc_stream_Delete(dc->fifo);
@@ -68,7 +71,9 @@ static void *vlc_demux_chained_Thread(void *data)
     /* Main loop */
     vlc_tick_t next_update = 0;
 
-    do
+    do{
+        printf("do loop demux_chained");
+
         if (demux_TestAndClearFlags(demux, UINT_MAX) || vlc_tick_now() >= next_update)
         {
             double newpos;
@@ -90,8 +95,8 @@ static void *vlc_demux_chained_Thread(void *data)
 
             next_update = vlc_tick_now() + VLC_TICK_FROM_MS(250);
         }
-    while (demux_Demux(demux) > 0);
-
+    } while (demux_Demux(demux) > 0);
+    printf("breaking out of demux loop");
     demux_Delete(demux);
     return NULL;
 }
@@ -102,6 +107,8 @@ vlc_demux_chained_t *vlc_demux_chained_New(vlc_object_t *parent,
     vlc_demux_chained_t *dc = malloc(sizeof (*dc) + strlen(name) + 1);
     if (unlikely(dc == NULL))
         return NULL;
+
+    printf("vlc_demux_chained_New: creating fifo\n");
 
     dc->fifo = vlc_stream_fifo_New(parent);
     if (dc->fifo == NULL)
@@ -118,6 +125,8 @@ vlc_demux_chained_t *vlc_demux_chained_New(vlc_object_t *parent,
 
     vlc_mutex_init(&dc->lock);
 
+    printf("vlc_demux_chained_New: vlc_clone fifo\n");
+
     if (vlc_clone(&dc->thread, vlc_demux_chained_Thread, dc,
                   VLC_THREAD_PRIORITY_INPUT))
     {
@@ -127,6 +136,8 @@ vlc_demux_chained_t *vlc_demux_chained_New(vlc_object_t *parent,
         free(dc);
         dc = NULL;
     }
+    printf("vlc_demux_chained_New: returning dc\n");
+
     return dc;
 }
 

@@ -120,7 +120,7 @@ typedef struct  {
 	//reconsititue mfu's into a p_out_muxed fifo
 	block_t *p_mpu_block;
     vlc_thread_t  thread;
-
+    int update_chained;
 	vlc_demux_chained_t *p_out_muxed;
 } demux_sys_t;
 
@@ -656,9 +656,9 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
     		msg_Info(p_demux, "sending p_mpu_block to chained decoder");
 
 			vlc_demux_chained_Send(p_sys->p_out_muxed, p_sys->p_mpu_block);
-			unsigned update = UINT_MAX;
-			vlc_demux_chained_Control(p_sys->p_out_muxed, DEMUX_TEST_AND_CLEAR_FLAGS, &update);
-
+			//unsigned update = UINT_MAX;
+			//vlc_demux_chained_Control(p_sys->p_out_muxed, DEMUX_TEST_AND_CLEAR_FLAGS, &update);
+			p_sys->update_chained = 1;
     	}
 		msg_Info(p_demux, "creating new p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
 
@@ -726,6 +726,7 @@ static int Control( demux_t *p_demux, int i_query, va_list args )
    // msg_Info(p_demux, "control: query is: %d", i_query);
 
     bool *pb;
+    unsigned *flags;
 
     switch ( i_query )
     {
@@ -762,10 +763,11 @@ static int Control( demux_t *p_demux, int i_query, va_list args )
         	return VLC_EGENERIC;
         	break;
 //
-//        case DEMUX_TEST_AND_CLEAR_FLAGS:
-//        	unsigned *flags = va_arg(args, unsigned *);
-//            flags = 1;
-//        	break;
+        case DEMUX_TEST_AND_CLEAR_FLAGS:
+    		msg_Err( p_demux, "****test and clear flags - mmtp_demuxer - access request returned null!");
+
+        	*va_arg(args, unsigned *) =  UINT_MAX;
+          	break;
 
     }
 

@@ -24,6 +24,7 @@ FFMPEGCONF = \
 	--disable-doc \
 	--disable-encoder=vorbis \
 	--disable-decoder=opus \
+	--disable-videotoolbox  \
 	--enable-libgsm \
 	--disable-debug \
 	--disable-avdevice \

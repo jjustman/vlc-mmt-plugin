@@ -62,7 +62,7 @@ vlc_module_begin ()
     set_subcategory( SUBCAT_INPUT_DEMUX )
     set_description( N_("MP4 stream demuxer") )
     set_shortname( N_("MP4") )
-    set_capability( "demux", 240 )
+    set_capability( "demux", 0 )
     set_callbacks( Open, Close )
 
     add_category_hint("Hacks", NULL)
@@ -723,6 +723,8 @@ static int Open( vlc_object_t * p_this )
     msg_Dbg( p_demux, "mp4.c: open at line: %d, parent %p", __LINE__, p_this->obj.parent);
 
     if(!p_this->obj.parent) {
+        msg_Err( p_demux, "mp4.c: missing parent!");
+
     	return VLC_EGENERIC;
     }
     /*Set exported functions */
@@ -834,6 +836,9 @@ static block_t * MP4_RTPHintToFrame( demux_t *p_demux, block_t *p_block, uint32_
     return p_newblock;
 
 error:
+
+	msg_Dbg( p_demux, "mp4.MP4_RTPHintToFrame: %d, returning null", __LINE__ );
+
     block_Release( p_block );
     if( p_newblock )
         block_Release( p_newblock );
@@ -1103,6 +1108,7 @@ static int Demux( demux_t *p_demux )
 {
 
     demux_sys_t *p_sys = p_demux->p_sys;
+    msg_Dbg( p_demux, "mp4.demux: %d", __LINE__ );
 
     if(p_sys->first_demux) {
 
@@ -1117,70 +1123,74 @@ static int Demux( demux_t *p_demux )
     	///huge copy and paste warning!!!!
 
     	 //put this in our first read
-    	    /* A little test to see if it could be a mp4 */
-    	    if( vlc_stream_Peek( p_demux->s, &p_peek, 12 ) < 12 ) {
-    	        msg_Dbg( p_demux, "mp4.c: peek failed at line %d", __LINE__ );
+		/* A little test to see if it could be a mp4 */
+		msg_Dbg( p_demux, "mp4.c: before peek: %d", __LINE__ );
 
-    	    	return VLC_EGENERIC;
-    	    }
+		if( vlc_stream_Peek( p_demux->s, &p_peek, 12 ) < 12 ) {
+			msg_Dbg( p_demux, "mp4.c: peek failed at line %d", __LINE__ );
 
-	        msg_Dbg( p_demux, "mp4.c: peek looks like \n0x%X 0x%X 0x%X 0x%X     0x%X 0x%X 0x%X 0x%X\n0x%X 0x%X 0x%X 0x%X",
+			return VLC_EGENERIC;
+		}
+
+	    msg_Dbg( p_demux, "mp4.c: peek looks like \n0x%X 0x%X 0x%X 0x%X     0x%X 0x%X 0x%X 0x%X\n0x%X 0x%X 0x%X 0x%X",
 	        		p_peek[0], p_peek[1],p_peek[2], p_peek[3],
 					p_peek[4], p_peek[5],p_peek[6], p_peek[7],
 					p_peek[8], p_peek[9],p_peek[10], p_peek[11]					);
 
+		switch( VLC_FOURCC( p_peek[4], p_peek[5], p_peek[6], p_peek[7] ) )
+		{
+			case ATOM_moov:
+			case ATOM_foov:
+			case ATOM_moof:
+			case ATOM_mdat:
+			case ATOM_udta:
+			case ATOM_free:
+			case ATOM_skip:
+			case ATOM_wide:
+			case ATOM_uuid:
+			case VLC_FOURCC( 'p', 'n', 'o', 't' ):
+				break;
+			case ATOM_ftyp:
+			{
+				/* Early handle some brands */
+				switch( VLC_FOURCC(p_peek[8], p_peek[9], p_peek[10], p_peek[11]) )
+				{
+					/* HEIF pictures goes to heif demux */
+					case BRAND_heic:
+					case BRAND_heix:
+					case BRAND_mif1:
+					case BRAND_jpeg:
+					case BRAND_avci:
+					case BRAND_avif:
+					/* We don't yet support f4v, but avformat does. */
+					case BRAND_f4v:
+						return VLC_EGENERIC;
+					default:
+						break;
+				}
+				break;
+			}
+			default:
+				msg_Dbg( p_demux, "mp4.c: fourcc peek failed at line: %d", __LINE__ );
+				return VLC_EGENERIC;
 
-    	    switch( VLC_FOURCC( p_peek[4], p_peek[5], p_peek[6], p_peek[7] ) )
-    	    {
-    	        case ATOM_moov:
-    	        case ATOM_foov:
-    	        case ATOM_moof:
-    	        case ATOM_mdat:
-    	        case ATOM_udta:
-    	        case ATOM_free:
-    	        case ATOM_skip:
-    	        case ATOM_wide:
-    	        case ATOM_uuid:
-    	        case VLC_FOURCC( 'p', 'n', 'o', 't' ):
-    	            break;
-    	        case ATOM_ftyp:
-    	        {
-    	            /* Early handle some brands */
-    	            switch( VLC_FOURCC(p_peek[8], p_peek[9], p_peek[10], p_peek[11]) )
-    	            {
-    	                /* HEIF pictures goes to heif demux */
-    	                case BRAND_heic:
-    	                case BRAND_heix:
-    	                case BRAND_mif1:
-    	                case BRAND_jpeg:
-    	                case BRAND_avci:
-    	                case BRAND_avif:
-    	                /* We don't yet support f4v, but avformat does. */
-    	                case BRAND_f4v:
-    	                    return VLC_EGENERIC;
-    	                default:
-    	                    break;
-    	            }
-    	            break;
-    	        }
-    	         default:
-    	        	    msg_Dbg( p_demux, "mp4.c: fourcc peek failed at line: %d", __LINE__ );
-
-    	            return VLC_EGENERIC;
-    	    }
-
-    	    /* create our structure that will contains all data */
-
-    	    /* I need to seek */
-    	    vlc_stream_Control( p_demux->s, STREAM_CAN_SEEK, &p_sys->b_seekable );
-    	    if( p_sys->b_seekable )
-    	        vlc_stream_Control( p_demux->s, STREAM_CAN_FASTSEEK, &p_sys->b_fastseekable );
+		}
 
 
 
-    	    //TODO - do this later when you have a
-    	    if( LoadInitFrag( p_demux ) != VLC_SUCCESS )
-    	        goto error;
+
+		/* create our structure that will contains all data */
+
+		/* I need to seek */
+		vlc_stream_Control( p_demux->s, STREAM_CAN_SEEK, &p_sys->b_seekable );
+		if( p_sys->b_seekable )
+			vlc_stream_Control( p_demux->s, STREAM_CAN_FASTSEEK, &p_sys->b_fastseekable );
+
+
+
+		//TODO - do this later when you have a
+		if( LoadInitFrag( p_demux ) != VLC_SUCCESS )
+			goto error;
 
     	    MP4_BoxDumpStructure( p_demux->s, p_sys->p_root );
 
