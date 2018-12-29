@@ -1,8 +1,24 @@
 demuxdir = $(pluginsdir)/demux
 demux_LTLIBRARIES =
 
-#jjustman-2018-12-18 - adding mmt demuxer
-libmmt_plugin_la_SOURCES = demux/mmt/mmtp_demuxer.c
+#jjustman-2018-12-18 - adding mmt demuxer, include libmp4 referenced symbols
+libmmt_plugin_la_SOURCES = demux/mmt/mmtp_demuxer.c demux/mmt/mp4.h \
+                           demux/mmt/fragments.c demux/mmt/fragments.h \
+                           demux/mmt/libmp4.c demux/mmt/libmp4.h \
+                           demux/mmt/languages.h \
+                           demux/mmt/heif.c demux/mmt/heif.h \
+                           demux/mmt/avci.h \
+                           demux/mmt/essetup.c demux/mmt/meta.c \
+                           demux/av1_unpack.h \
+                           demux/asf/asfpacket.c demux/asf/asfpacket.h \
+                           packetizer/iso_color_tables.h \
+                           meta_engine/ID3Genres.h
+libmmt_plugin_la_LIBADD = $(LIBM)
+libmmt_plugin_la_LDFLAGS = $(AM_LDFLAGS)
+if HAVE_ZLIB
+libmmt_plugin_la_LIBADD += -lz
+endif
+
 demux_LTLIBRARIES += libmmt_plugin.la
 #end-2018-12-18
 
@@ -208,23 +224,23 @@ endif
 demux_LTLIBRARIES += $(LTLIBmkv)
 EXTRA_LTLIBRARIES += libmkv_plugin.la
 
-libmp4_plugin_la_SOURCES = demux/mp4/mp4.c demux/mp4/mp4.h \
-                           demux/mp4/fragments.c demux/mp4/fragments.h \
-                           demux/mp4/libmp4.c demux/mp4/libmp4.h \
-                           demux/mp4/languages.h \
-                           demux/mp4/heif.c demux/mp4/heif.h \
-                           demux/mp4/avci.h \
-                           demux/mp4/essetup.c demux/mp4/meta.c \
-                           demux/av1_unpack.h \
-                           demux/asf/asfpacket.c demux/asf/asfpacket.h \
-                           packetizer/iso_color_tables.h \
-                           meta_engine/ID3Genres.h
-libmp4_plugin_la_LIBADD = $(LIBM)
-libmp4_plugin_la_LDFLAGS = $(AM_LDFLAGS)
-if HAVE_ZLIB
-libmp4_plugin_la_LIBADD += -lz
-endif
-demux_LTLIBRARIES += libmp4_plugin.la
+#libmp4_plugin_la_SOURCES = demux/mp4/mp4.c demux/mp4/mp4.h \
+#                           demux/mp4/fragments.c demux/mp4/fragments.h \
+#                           demux/mp4/libmp4.c demux/mp4/libmp4.h \
+#                           demux/mp4/languages.h \
+#                           demux/mp4/heif.c demux/mp4/heif.h \
+#                           demux/mp4/avci.h \
+#                           demux/mp4/essetup.c demux/mp4/meta.c \
+#                           demux/av1_unpack.h \
+#                           demux/asf/asfpacket.c demux/asf/asfpacket.h \
+#                           packetizer/iso_color_tables.h \
+#                           meta_engine/ID3Genres.h
+#libmp4_plugin_la_LIBADD = $(LIBM)
+#libmp4_plugin_la_LDFLAGS = $(AM_LDFLAGS)
+#if HAVE_ZLIB
+#libmp4_plugin_la_LIBADD += -lz
+#endif
+#demux_LTLIBRARIES += libmp4_plugin.la
 
 libmpgv_plugin_la_SOURCES = demux/mpeg/mpgv.c
 demux_LTLIBRARIES += libmpgv_plugin.la

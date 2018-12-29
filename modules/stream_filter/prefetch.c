@@ -430,7 +430,7 @@ static int Open(vlc_object_t *obj)
     stream_t *stream = (stream_t *)obj;
 
     //jdj-2018-12-21
-    return VLC_EGENERIC;
+   // return VLC_EGENERIC;
 
     bool fast_seek;
     /* For local files, the operating system is likely to do a better work at
@@ -547,6 +547,7 @@ static void Close (vlc_object_t *obj)
     free(sys);
 }
 
+/**
 vlc_module_begin()
     set_category(CAT_INPUT)
     set_subcategory(SUBCAT_INPUT_STREAM_FILTER)
@@ -558,8 +559,10 @@ vlc_module_begin()
     add_integer("prefetch-buffer-size", 1 << 14, N_("Buffer size"),
                 N_("Prefetch buffer size (KiB)"), false)
         change_integer_range(4, 1 << 20)
-    add_obsolete_integer("prefetch-read-size") /* since 4.0.0 */
+    add_obsolete_integer("prefetch-read-size") * since 4.0.0 *
     add_integer("prefetch-seek-threshold", 1 << 14, N_("Seek threshold"),
                 N_("Prefetch forward seek threshold (bytes)"), true)
         change_integer_range(0, UINT64_C(1) << 60)
 vlc_module_end()
+
+**/

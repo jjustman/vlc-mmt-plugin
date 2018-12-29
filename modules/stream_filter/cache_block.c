@@ -280,7 +280,7 @@ static int Open(vlc_object_t *obj)
     stream_t *s = (stream_t *)obj;
 
     //jdj-2018-12-21
-    return VLC_EGENERIC;
+    //return VLC_EGENERIC;
 
     if (s->s->pf_block == NULL)
         return VLC_EGENERIC;
@@ -323,6 +323,7 @@ static void Close(vlc_object_t *obj)
     free(sys);
 }
 
+/**
 vlc_module_begin()
     set_category(CAT_INPUT)
     set_subcategory(SUBCAT_INPUT_STREAM_FILTER)
@@ -332,3 +333,4 @@ vlc_module_begin()
     set_description(N_("Block stream cache"))
     set_callbacks(Open, Close)
 vlc_module_end()
+**/

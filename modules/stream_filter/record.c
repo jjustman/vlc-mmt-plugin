@@ -43,6 +43,7 @@
 static int  Open ( vlc_object_t * );
 static void Close( vlc_object_t * );
 
+/**
 vlc_module_begin()
     set_category( CAT_INPUT )
     set_subcategory( SUBCAT_INPUT_STREAM_FILTER )
@@ -50,6 +51,8 @@ vlc_module_begin()
     set_capability( "stream_filter", 0 )
     set_callbacks( Open, Close )
 vlc_module_end()
+
+**/
 
 /*****************************************************************************
  *
@@ -77,7 +80,7 @@ static void Write  ( stream_t *, const uint8_t *p_buffer, size_t i_buffer );
  ****************************************************************************/
 static int Open ( vlc_object_t *p_this )
 {
-    return VLC_EGENERIC;
+//    return VLC_EGENERIC;
 
     stream_t *s = (stream_t*)p_this;
     stream_sys_t *p_sys;

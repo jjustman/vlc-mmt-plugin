@@ -214,7 +214,6 @@ static int Control( stream_t *p_access, int i_query, va_list args )
         case STREAM_CAN_PAUSE:
         case STREAM_CAN_CONTROL_PACE:
             pb_bool = va_arg( args, bool * );
-           
             *pb_bool = false;
             break;
 
@@ -222,16 +221,6 @@ static int Control( stream_t *p_access, int i_query, va_list args )
             *va_arg( args, vlc_tick_t * ) =
                 VLC_TICK_FROM_MS(var_InheritInteger(p_access, "network-caching"));
             break;
-//
-//        //arg1=int i_private_data arg2=bool *
-//        case STREAM_GET_PRIVATE_ID_STATE:
-//        	id = va_arg( args, int);
-//        	id=0;
-//
-//            pb_bool = va_arg( args, bool * );
-//        	*pb_bool = false;
-//			break;
-////          return VLC_SUCCESS;
 
         default:
             return VLC_EGENERIC;
