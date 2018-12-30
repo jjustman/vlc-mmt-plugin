@@ -1268,7 +1268,7 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
 
 			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment with last_mpu_fragment_type==2, mpu_fragment_type==0, flushing to __processFirstMpuFragment");
-			dumpBlock(p_demux, mpu);
+		//	dumpBlock(p_demux, mpu);
 
 
 			//stream_t *orig_stream = p_demux->s;
