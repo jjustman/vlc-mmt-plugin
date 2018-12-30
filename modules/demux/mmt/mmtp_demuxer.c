@@ -214,6 +214,8 @@ static void LoadChapter( demux_t  *p_demux );
 static int LoadInitFrag( demux_t *p_demux );
 static int __mp4_Demux( demux_t *p_demux );
 
+void dumpBlock(demux_t *p_demux, block_t *mpu);
+
 
 /*****************************************************************************
  * Declaration of local function
@@ -271,6 +273,7 @@ static void MP4_GetInterleaving( demux_t *p_demux, vlc_tick_t *pi_max_contiguous
 //short reads from UDP may happen on starutp buffering or truncation
 #define MIN_MMTP_SIZE 224
 #define MAX_MMTP_SIZE 1514
+#define MAX_MMT_REFRAGMENT_SIZE 65535
 
 static int Demux( demux_t * );
 static int Control( demux_t *, int,va_list );
@@ -683,6 +686,8 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 				{
 					char *psz_absolute = vlc_uri_resolve( p_demux->psz_url,
 														  psz_ref );
+					msg_Dbg( p_demux, "%d, calling free on psz_ref: %p", __LINE__, (void*)psz_ref);
+
 					free( psz_ref );
 					if( psz_absolute == NULL )
 					{
@@ -1178,8 +1183,8 @@ static int Demux( demux_t *p_demux )
 				if(mpu_fragment_type != 0x2) {
 					//read
 					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
-					buf = extract(buf, tmp_mpu_fragment->p_buffer, data_unit_length);
-					tmp_mpu_fragment->i_buffer = data_unit_length;
+					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
+					tmp_mpu_fragment->i_buffer = to_read_packet_length;
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
 					remainingPacketLen = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
 
@@ -1227,6 +1232,8 @@ static int Demux( demux_t *p_demux )
 	return VLC_DEMUXER_SUCCESS;
 }
 static int lastPacketId = -1;
+static int last_mpu_fragment_type = -1;
+
 
 /*** we must start with a:
  * 	 fragment_type cadence of 0 -> 1 -> 2,
@@ -1234,82 +1241,187 @@ static int lastPacketId = -1;
  * 	 	 ordered by packet_sequence_number
  *
  *
+ *assume packet_id=35
+ *
  */
 void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment ) {
 
 	demux_sys_t *p_sys = p_demux->p_sys;
     //if we have a new packet id, assume we can send the current payload off
-    if(mmtp_packet_id >= lastPacketId) {
-    	//send off if we have a pending mpu block
-    	if(p_sys->p_mpu_block  && p_sys->p_mpu_block->i_buffer > 0)  {
-    		msg_Info(p_demux, "sending p_mpu_block to inline mp4 demuxer, size: %zu", p_sys->p_mpu_block->i_buffer);
+	if(mmtp_packet_id != 35) {
+		msg_Info(p_demux, "processMpuPacket - returning because mmtp_packet_id!=35, val is %hu", mmtp_packet_id);
+		return;
+	}
 
-    		//TODO - either VLC_API stream_t *vlc_stream_fifo_New(vlc_object_t *parent);
-    		block_t* mpu = block_ChainGather(p_sys->p_mpu_block);
-    		//or VLC_API stream_t *vlc_stream_MemoryNew(vlc_object_t *obj, uint8_t *base,
+	if(last_mpu_fragment_type == 2 && mpu_fragment_type==0) {
 
-    		msg_Info(p_demux, "mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
+		//this is a mpu re-initialization, check if we have mfu's buffered?
+		if(p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer > 0) {
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** to ISOBMFF - last_mpu_fragment_type==2, mpu_fragment_type==0, pending p_mpu_block is: %zu", p_sys->p_mpu_block->i_buffer);
+			block_t* mpu = block_ChainGather(p_sys->p_mpu_block);
 
-    		//stream_t *orig_stream = p_demux->s;
-    		msg_Info(p_demux, "cloning demux_t");
+			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
 
-    		demux_t *mp4_demux = malloc(sizeof(demux_t));
-    		memcpy((void *)mp4_demux, (void *)p_demux, sizeof(demux_t));
+			//stream_t *orig_stream = p_demux->s;
+			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** cloning demux_t");
 
-    		//swap out p_demux->s with re-encapsulated payload
-    		msg_Info(p_demux, "cloning vlc_stream_MemoryNew");
+			demux_t *mp4_demux = malloc(sizeof(demux_t));
+			memcpy((void *)mp4_demux, (void *)p_demux, sizeof(demux_t));
 
-    		mp4_demux->s = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
+			//swap out p_demux->s with re-encapsulated payload
+			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ************ cloning vlc_stream_MemoryNew");
 
-    		msg_Info(p_demux, "dumping p_buffer: mpu->i_buffer is: %zu length: ", mpu->i_buffer);
-    		char buffer[mpu->i_buffer * 5+1]; //0x00 |
-    										//12345
-    		for(int i=0; i < mpu->i_buffer; i++) {
-    			if(i>0 && (i-1)%8 == 0) {
-    				snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
-    			} else {
-    				snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
-    			}
-    		//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
-    		}
-    		msg_Info(mp4_demux, "p_buffer is:\n%s", buffer);
-
-    		__processFirstMpuFragment(mp4_demux);
-    		__mp4_Demux(mp4_demux);
-
-    		//clear out block buffer
-    		block_Release(p_sys->p_mpu_block);
-
-    		p_sys->p_mpu_block = NULL;
+			mp4_demux->s = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
 
 
-			//vlc_demux_chained_Send(p_sys->p_out_muxed, p_sys->p_mpu_block);
-			//unsigned update = UINT_MAX;
-			//vlc_demux_chained_Control(p_sys->p_out_muxed, DEMUX_TEST_AND_CLEAR_FLAGS, &update);
-			//p_sys->update_chained = 1;
-    	}
 
-    	p_sys->p_mpu_block = block_Alloc(MAX_MMTP_SIZE);
+//			msg_Info(p_demux, "processMpuPacket ******* dumping p_buffer: mpu->i_buffer is: %zu length: ", mpu->i_buffer);
+//			char buffer[mpu->i_buffer * 5+1]; //0x00 |
 
-		msg_Info(p_demux, "%d:: creating new p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block",__LINE__, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
+//
+//											//12345
+//			for(int i=0; i < mpu->i_buffer; i++) {
+//				if(i>0 && (i-1)%8 == 0) {
+//					snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
+//				} else {
+//					snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
+//				}
+//			//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
+//			}
+//			msg_Info(mp4_demux, "processMpuPacket ******* p_buffer is:\n%s", buffer);
 
-		msg_Info(p_demux, "%d:: mpu block i_buffer is: %zu length, first four are: 0x%x 0x%x 0x%x 0x%x ", __LINE__, tmp_mpu_fragment->i_buffer, tmp_mpu_fragment->p_buffer[0], tmp_mpu_fragment->p_buffer[1], tmp_mpu_fragment->p_buffer[2], tmp_mpu_fragment->p_buffer[3]);
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment with last_mpu_fragment_type==2, mpu_fragment_type==0, flushing to __processFirstMpuFragment");
+			dumpBlock(p_demux, mpu);
 
-		//p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
-	    block_ChainAppend(&p_sys->p_mpu_block, tmp_mpu_fragment);
 
-		lastPacketId = mmtp_packet_id;
+			__processFirstMpuFragment(mp4_demux);
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment complete");
 
-    } else {
-		msg_Info(p_demux, "appending p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
+			__mp4_Demux(mp4_demux);
 
-		msg_Info(p_demux, "%d:: mpu block i_buffer is: %zu length, first four are: 0x%x 0x%x 0x%x 0x%x ", __LINE__, tmp_mpu_fragment->i_buffer, tmp_mpu_fragment->p_buffer[0], tmp_mpu_fragment->p_buffer[1], tmp_mpu_fragment->p_buffer[2], tmp_mpu_fragment->p_buffer[3]);
+			//clear out block buffer
+			block_Release(p_sys->p_mpu_block);
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** block_Release complete");
 
-    	//append
-		block_ChainAppend(&p_sys->p_mpu_block, tmp_mpu_fragment);
 
-    }
-    return;
+
+		} else {
+			msg_Info(p_demux, "processMpuPacket - last_mpu_fragment_type==2, mpu_fragment_type==0, but no pending p_mpu_block, not flushing to isobmff, discarding");
+		}
+
+		p_sys->p_mpu_block = NULL;
+
+		//push this fragment to libmp4
+
+	}
+
+	if(mpu_fragment_type == 0) {
+		if(p_sys->p_mpu_block != NULL) {
+			block_Release(p_sys->p_mpu_block);
+		}
+		//create a new  building up p_mpu_vlock
+		//don't realloc here
+		//p_sys->p_mpu_block = block_Alloc(MAX_MMT_REFRAGMENT_SIZE);
+		p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
+
+//		block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
+		msg_Info(p_demux, "processMpuPacket - NEW p_mpu_block with tmp_mpu_fragment: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
+
+		dumpBlock(p_demux, p_sys->p_mpu_block);
+
+
+
+		//copy MPU metadata
+
+
+	} else if ((mpu_fragment_type == 1 || mpu_fragment_type == 2)  && p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer >0) {
+		//copy in either movie fragment metadata or MFU payloads
+		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
+
+		//try and re-gather after appending to gate accurate counts?
+		p_sys->p_mpu_block = block_ChainGather(p_sys->p_mpu_block);
+		msg_Info(p_demux, "processMpuPacket - APPENDING packet_id: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
+
+		//append
+	} else {
+		msg_Warn(p_demux, "processMpuPacket - DISCARDING packet_id: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block);
+
+	}
+
+	last_mpu_fragment_type = mpu_fragment_type;
+
+//
+//    if(mmtp_packet_id >= lastPacketId) {
+//    	//send off if we have a pending mpu block
+//    	if(p_sys->p_mpu_block  && p_sys->p_mpu_block->i_buffer > 0)  {
+//    		msg_Info(p_demux, "sending p_mpu_block to inline mp4 demuxer, size: %zu", p_sys->p_mpu_block->i_buffer);
+//
+//    		//TODO - either VLC_API stream_t *vlc_stream_fifo_New(vlc_object_t *parent);
+//    		block_t* mpu = block_ChainGather(p_sys->p_mpu_block);
+//    		//or VLC_API stream_t *vlc_stream_MemoryNew(vlc_object_t *obj, uint8_t *base,
+//
+//    		msg_Info(p_demux, "mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
+//
+//    		//stream_t *orig_stream = p_demux->s;
+//    		msg_Info(p_demux, "cloning demux_t");
+//
+//    		demux_t *mp4_demux = malloc(sizeof(demux_t));
+//    		memcpy((void *)mp4_demux, (void *)p_demux, sizeof(demux_t));
+//
+//    		//swap out p_demux->s with re-encapsulated payload
+//    		msg_Info(p_demux, "cloning vlc_stream_MemoryNew");
+//
+//    		mp4_demux->s = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
+//
+//    		msg_Info(p_demux, "dumping p_buffer: mpu->i_buffer is: %zu length: ", mpu->i_buffer);
+//    		char buffer[mpu->i_buffer * 5+1]; //0x00 |
+//    										//12345
+//    		for(int i=0; i < mpu->i_buffer; i++) {
+//    			if(i>0 && (i-1)%8 == 0) {
+//    				snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
+//    			} else {
+//    				snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
+//    			}
+//    		//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
+//    		}
+//    		msg_Info(mp4_demux, "p_buffer is:\n%s", buffer);
+//
+//    		__processFirstMpuFragment(mp4_demux);
+//    		__mp4_Demux(mp4_demux);
+//
+//    		//clear out block buffer
+//    		block_Release(p_sys->p_mpu_block);
+//
+//    		p_sys->p_mpu_block = NULL;
+//
+//
+//			//vlc_demux_chained_Send(p_sys->p_out_muxed, p_sys->p_mpu_block);
+//			//unsigned update = UINT_MAX;
+//			//vlc_demux_chained_Control(p_sys->p_out_muxed, DEMUX_TEST_AND_CLEAR_FLAGS, &update);
+//			//p_sys->update_chained = 1;
+//    	}
+//
+//    	p_sys->p_mpu_block = block_Alloc(MAX_MMTP_SIZE);
+//
+//		msg_Info(p_demux, "%d:: creating new p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block",__LINE__, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
+//
+//		msg_Info(p_demux, "%d:: mpu block i_buffer is: %zu length, first four are: 0x%x 0x%x 0x%x 0x%x ", __LINE__, tmp_mpu_fragment->i_buffer, tmp_mpu_fragment->p_buffer[0], tmp_mpu_fragment->p_buffer[1], tmp_mpu_fragment->p_buffer[2], tmp_mpu_fragment->p_buffer[3]);
+//
+//		//p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
+//	    block_ChainAppend(&p_sys->p_mpu_block, tmp_mpu_fragment);
+//
+//		lastPacketId = mmtp_packet_id;
+//
+//    } else {
+//		msg_Info(p_demux, "appending p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
+//
+//		msg_Info(p_demux, "%d:: mpu block i_buffer is: %zu length, first four are: 0x%x 0x%x 0x%x 0x%x ", __LINE__, tmp_mpu_fragment->i_buffer, tmp_mpu_fragment->p_buffer[0], tmp_mpu_fragment->p_buffer[1], tmp_mpu_fragment->p_buffer[2], tmp_mpu_fragment->p_buffer[3]);
+//
+//    	//append
+//		block_ChainAppend(&p_sys->p_mpu_block, tmp_mpu_fragment);
+//
+//    }
+//    return;
 //
 //	if(mpu_fragmentation_indicator == 0) {
 //		msg_Info(p_demux, "mpu_fragmentation_indicator = 0, pushing tmp_mpu_fragement to fifo");
@@ -1349,6 +1461,22 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 //		}
 //	}
 
+
+}
+
+void dumpBlock(demux_t *p_demux, block_t *mpu) {
+
+	char buffer[mpu->i_buffer * 5+1]; //0x00 |
+									//12345
+	for(int i=0; i < mpu->i_buffer; i++) {
+		if(i>0 && (i+1)%8 == 0) {
+			snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
+		} else {
+			snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
+		}
+	//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
+	}
+	msg_Info(p_demux, "::dumpBlock ******* dumping block_t mpu->i_buffer is: %zu, p_buffer is:\n%s", mpu->i_buffer, buffer);
 
 }
 
@@ -1670,6 +1798,8 @@ static int LoadInitFrag( demux_t *p_demux )
     MP4_Box_t *p_root = MP4_BoxGetRoot( p_demux->s );
     if( p_root == NULL || !MP4_BoxGet( p_root, "/moov" ) )
     {
+		msg_Dbg( p_demux, "%d, calling free on p_root: %p", __LINE__, (void*)p_root);
+
         MP4_BoxFree( p_root );
         goto LoadInitFragError;
     }
