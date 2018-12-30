@@ -465,7 +465,7 @@ static int MP4_ReadBoxContainerChildrenIndexed( stream_t *p_stream,
         (uint64_t)(p_container->i_pos + p_container->i_size) )
       )
     {
-        printf("MP4_ReadBoxContainerChildrenIndexed - no box to load");
+    	msg_Err(p_stream, "MP4_ReadBoxContainerChildrenIndexed - no box to load");
 
         /* there is no box to load */
         return 0;
@@ -478,12 +478,14 @@ static int MP4_ReadBoxContainerChildrenIndexed( stream_t *p_stream,
     bool b_continue;
     do
     {
-    	printf("MP4_ReadBoxContainerChildrenIndexed looping: ");
+    	msg_Info(p_stream, "MP4_ReadBoxContainerChildrenIndexed looping at i_last_pos: %" PRId64", i_end: %" PRId64, i_last_pos, i_end);
 
         b_continue = false;
         if ( p_container->i_size )
         {
             const uint64_t i_tell = vlc_stream_Tell( p_stream );
+        	msg_Info(p_stream, "MP4_ReadBoxContainerChildrenIndexed, i_tell is: %" PRId64, i_tell);
+
             if( i_tell + ((b_indexed)?16:8) >= i_end )
                 break;
         }
@@ -495,7 +497,7 @@ static int MP4_ReadBoxContainerChildrenIndexed( stream_t *p_stream,
             if ( vlc_stream_Read( p_stream, read, 8 ) < 8 )
                 break;
 
-            printf("MP4_ReadBoxContainerChildrenIndexed reading: 0x%x 0x%x 0x%x 0x%x", read[0], read[1], read[2], read[3]);
+            msg_Info(p_stream, "MP4_ReadBoxContainerChildrenIndexed reading: 0x%x 0x%x 0x%x 0x%x", read[0], read[1], read[2], read[3]);
 
             i_index = GetDWBE(&read[4]);
         }
