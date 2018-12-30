@@ -1183,8 +1183,11 @@ static int Demux( demux_t *p_demux )
 				if(mpu_fragment_type != 0x2) {
 					//read
 					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
+					msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
+
 					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
+
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
 					remainingPacketLen = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
 
@@ -1215,9 +1218,11 @@ static int Demux( demux_t *p_demux )
 
 //					msg_Dbg( p_demux, "before reading fragment packet:  %p", (void*)p_sys->p_mpu_block);
 
-					block_t *tmp_mpu_fragment = block_Alloc(data_unit_length);
-					buf = extract(buf, tmp_mpu_fragment->p_buffer, data_unit_length);
-					tmp_mpu_fragment->i_buffer = data_unit_length;
+					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
+					msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
+
+					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
+					tmp_mpu_fragment->i_buffer = to_read_packet_length;
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
 					remainingPacketLen = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
 
@@ -1262,6 +1267,10 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 
 			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
 
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment with last_mpu_fragment_type==2, mpu_fragment_type==0, flushing to __processFirstMpuFragment");
+			dumpBlock(p_demux, mpu);
+
+
 			//stream_t *orig_stream = p_demux->s;
 			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** cloning demux_t");
 
@@ -1290,17 +1299,15 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 //			}
 //			msg_Info(mp4_demux, "processMpuPacket ******* p_buffer is:\n%s", buffer);
 
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment with last_mpu_fragment_type==2, mpu_fragment_type==0, flushing to __processFirstMpuFragment");
-			dumpBlock(p_demux, mpu);
-
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - before");
 
 			__processFirstMpuFragment(mp4_demux);
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment complete");
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - complete");
 
 			__mp4_Demux(mp4_demux);
 
 			//clear out block buffer
-			block_Release(p_sys->p_mpu_block);
+			//block_Release(p_sys->p_mpu_block);
 			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** block_Release complete");
 
 
@@ -1322,9 +1329,14 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 		//create a new  building up p_mpu_vlock
 		//don't realloc here
 		//p_sys->p_mpu_block = block_Alloc(MAX_MMT_REFRAGMENT_SIZE);
-		p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
 
-//		block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
+		//hack??
+		p_sys->p_mpu_block = NULL;
+
+
+		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
+		p_sys->p_mpu_block = block_ChainGather(p_sys->p_mpu_block);
+
 		msg_Info(p_demux, "processMpuPacket - NEW p_mpu_block with tmp_mpu_fragment: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
 
 		dumpBlock(p_demux, p_sys->p_mpu_block);
@@ -1337,6 +1349,8 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 	} else if ((mpu_fragment_type == 1 || mpu_fragment_type == 2)  && p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer >0) {
 		//copy in either movie fragment metadata or MFU payloads
 		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
+		msg_Info(p_demux, "processMpuPacket - APPENDING - !!!tmp_mpu_fragment size is: %d", tmp_mpu_fragment->i_buffer);
+
 
 		//try and re-gather after appending to gate accurate counts?
 		p_sys->p_mpu_block = block_ChainGather(p_sys->p_mpu_block);
@@ -1465,6 +1479,8 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 }
 
 void dumpBlock(demux_t *p_demux, block_t *mpu) {
+
+	msg_Info(p_demux, "::dumpBlock ******* dumping block_t mpu->i_buffer is: %zu, p_buffer[0] is:\n%c", mpu->i_buffer, mpu->p_buffer[0]);
 
 	char buffer[mpu->i_buffer * 5+1]; //0x00 |
 									//12345
