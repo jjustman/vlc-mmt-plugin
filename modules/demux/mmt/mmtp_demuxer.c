@@ -4871,12 +4871,12 @@ static void MP4_TrackSetup( demux_t *p_demux, mp4_track_t *p_track,
     }
 
     /* Create chunk index table and sample index table */
-    if( TrackCreateChunksIndex( p_demux,p_track  ) ||
-        TrackCreateSamplesIndex( p_demux, p_track ) )
-    {
-        msg_Err( p_demux, "cannot create chunks index" );
-        return; /* cannot create chunks index */
-    }
+//    if( TrackCreateChunksIndex( p_demux,p_track  ) ||
+//        TrackCreateSamplesIndex( p_demux, p_track ) )
+//    {
+//        msg_Err( p_demux, "cannot create chunks index" );
+//        return; /* cannot create chunks index */
+//    }
 
     p_track->i_chunk  = 0;
     p_track->i_sample = 0;
@@ -5033,7 +5033,10 @@ static void MP4_TrackSelect( demux_t *p_demux, mp4_track_t *p_track, bool b_sele
 static int MP4_TrackSeek( demux_t *p_demux, mp4_track_t *p_track,
                           vlc_tick_t i_start )
 {
-    uint32_t i_chunk;
+
+	return VLC_SUCCESS;
+
+	uint32_t i_chunk;
     uint32_t i_sample;
 
     if( !p_track->b_ok || p_track->b_chapters_source )
