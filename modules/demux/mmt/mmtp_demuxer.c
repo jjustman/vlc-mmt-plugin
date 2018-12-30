@@ -861,23 +861,23 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 		p_demux->pf_demux = DemuxFrag;
 		msg_Dbg( p_demux, "Set Fragmented demux mode" );
 	}
-
-	if( !p_sys->b_seekable && p_demux->pf_demux == Demux )
-	{
-		msg_Warn( p_demux, "MP4 plugin discarded (not seekable)" );
-		goto error;
-	}
-
-	if( p_sys->i_tracks > 1 && !p_sys->b_fastseekable )
-	{
-		vlc_tick_t i_max_continuity;
-		bool b_flat;
-		MP4_GetInterleaving( p_demux, &i_max_continuity, &b_flat );
-		if( b_flat )
-			msg_Warn( p_demux, "that media doesn't look interleaved, will need to seek");
-		else if( i_max_continuity > DEMUX_TRACK_MAX_PRELOAD )
-			msg_Warn( p_demux, "that media doesn't look properly interleaved, will need to seek");
-	}
+//
+//	if( !p_sys->b_seekable && p_demux->pf_demux == Demux )
+//	{
+//		msg_Warn( p_demux, "MP4 plugin discarded (not seekable)" );
+//		goto error;
+//	}
+//
+//	if( p_sys->i_tracks > 1 && !p_sys->b_fastseekable )
+//	{
+//		vlc_tick_t i_max_continuity;
+//		bool b_flat;
+//		MP4_GetInterleaving( p_demux, &i_max_continuity, &b_flat );
+//		if( b_flat )
+//			msg_Warn( p_demux, "that media doesn't look interleaved, will need to seek");
+//		else if( i_max_continuity > DEMUX_TRACK_MAX_PRELOAD )
+//			msg_Warn( p_demux, "that media doesn't look properly interleaved, will need to seek");
+//	}
 
 	/* */
 	LoadChapter( p_demux );
@@ -1826,7 +1826,7 @@ static int LoadInitFrag( demux_t *p_demux )
 
 LoadInitFragError:
     msg_Warn( p_demux, "MP4 plugin discarded (not a valid initialization chunk)" );
-    return VLC_EGENERIC;
+    return VLC_SUCCESS;
 }
 
 static int CreateTracks( demux_t *p_demux, unsigned i_tracks )
@@ -2331,7 +2331,7 @@ static int __mp4_Open( vlc_object_t * p_this )
     /* Search the first chap reference (like quicktime) and
      * check that at least 1 stream is enabled */
     p_sys->p_tref_chap = NULL;
-    b_enabled_es = false;
+    b_enabled_es = true;
     for( unsigned i = 0; i < p_sys->i_tracks; i++ )
     {
         MP4_Box_t *p_trak = MP4_BoxGet( p_sys->p_root, "/moov/trak[%d]", i );

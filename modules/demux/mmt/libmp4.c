@@ -545,6 +545,8 @@ static int MP4_ReadBoxContainerChildrenIndexed( stream_t *p_stream,
 int MP4_ReadBoxContainerRestricted( stream_t *p_stream, MP4_Box_t *p_container,
                                     const uint32_t stoplist[], const uint32_t excludelist[] )
 {
+	msg_Err(p_stream, "MP4_ReadBoxContainerRestricted");
+
     return MP4_ReadBoxContainerChildrenIndexed( p_stream, p_container,
                                                 stoplist, excludelist, false );
 }
@@ -552,6 +554,8 @@ int MP4_ReadBoxContainerRestricted( stream_t *p_stream, MP4_Box_t *p_container,
 int MP4_ReadBoxContainerChildren( stream_t *p_stream, MP4_Box_t *p_container,
                                   const uint32_t stoplist[] )
 {
+	msg_Err(p_stream, "MP4_ReadBoxContainerChildren");
+
     return MP4_ReadBoxContainerChildrenIndexed( p_stream, p_container,
                                                 stoplist, NULL, false );
 }
@@ -577,6 +581,8 @@ static int MP4_ReadBoxContainerRawInBox( stream_t *p_stream, MP4_Box_t *p_contai
     if( !p_substream )
         return 0;
     MP4_Box_t *p_last = p_container->p_last;
+	msg_Err(p_stream, "%d:MP4_ReadBoxContainerRawInBox", __LINE__);
+
     MP4_ReadBoxContainerChildren( p_substream, p_container, NULL );
     vlc_stream_Delete( p_substream );
     /* do pos fixup */
@@ -591,6 +597,8 @@ static int MP4_ReadBoxContainerRawInBox( stream_t *p_stream, MP4_Box_t *p_contai
 
 static int MP4_ReadBoxContainer( stream_t *p_stream, MP4_Box_t *p_container )
 {
+	msg_Err(p_stream, "%d:MP4_ReadBoxContainer, %u ", __LINE__, p_container->i_type);
+
     if( p_container->i_size &&
         ( p_container->i_size <= (size_t)mp4_box_headersize(p_container ) + 8 ) )
     {
@@ -602,6 +610,9 @@ static int MP4_ReadBoxContainer( stream_t *p_stream, MP4_Box_t *p_container )
     if ( MP4_Seek( p_stream, p_container->i_pos +
                       mp4_box_headersize( p_container ) ) )
         return 0;
+
+	msg_Err(p_stream, "%d:MP4_ReadBoxContainer", __LINE__);
+
     return MP4_ReadBoxContainerChildren( p_stream, p_container, NULL );
 }
 
@@ -2757,6 +2768,8 @@ static int MP4_ReadBox_sample_mp4s( stream_t *p_stream, MP4_Box_t *p_box )
     if( i_read < 8 )
         MP4_READBOX_EXIT( 0 );
 
+	msg_Err(p_stream, "MP4_ReadBox_sample_mp4s");
+
     MP4_ReadBoxContainerChildren( p_stream, p_box, NULL );
 
     if ( MP4_Seek( p_stream, p_box->i_pos + p_box->i_size ) )
@@ -2785,6 +2798,8 @@ static int MP4_ReadBox_sample_hint8( stream_t *p_stream, MP4_Box_t *p_box )
         MP4_READBOX_EXIT( 0 );
 
     MP4_GET8BYTES( *(p_box->data.p_sample_hint->p_data) );
+
+	msg_Err(p_stream, "%d:MP4_ReadBox_sample_hint8", __LINE__);
 
     MP4_ReadBoxContainerChildren(p_stream, p_box, NULL);
 
@@ -3303,6 +3318,7 @@ static int MP4_ReadBox_cmov( stream_t *p_stream, MP4_Box_t *p_box )
         msg_Warn( p_stream, "Read box: \"cmov\" box alone" );
         return 1;
     }
+	msg_Err(p_stream, "%d:MP4_ReadBox_cmov", __LINE__);
 
     if( !MP4_ReadBoxContainer( p_stream, p_box ) )
     {
