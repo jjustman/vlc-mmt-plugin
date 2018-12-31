@@ -1397,13 +1397,13 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 
 	} else if ((mpu_fragment_type == 1 || mpu_fragment_type == 2)  && p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer >0) {
 		//copy in either movie fragment metadata or MFU payloads
-		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
-		msg_Info(p_demux, "processMpuPacket - APPENDING - !!!tmp_mpu_fragment size is: %d", tmp_mpu_fragment->i_buffer);
 
+		dumpMfu(p_demux, tmp_mpu_fragment);
+		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
 
 		//try and re-gather after appending to gate accurate counts?
 		p_sys->p_mpu_block = block_ChainGather(p_sys->p_mpu_block);
-		msg_Info(p_demux, "processMpuPacket - APPENDING packet_id: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
+		msg_Info(p_demux, "processMpuPacket - APPENDING packet_id: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, tmp_mpu_fragment size is: %d, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, tmp_mpu_fragment->i_buffer, p_sys->p_mpu_block->i_buffer );
 
 		//append
 	} else {
@@ -1589,6 +1589,8 @@ void dumpMfu(demux_t *p_demux, block_t *mpu) {
 		strncat(myFilePathName, "mfu/", 4);
 		pos = strlen(myFilePathName);
 		itoa(__MPU_COUNTER, myFilePathName+pos, 10);
+		pos = strlen(myFilePathName);
+
 		myFilePathName[pos] = '-';
 		myFilePathName[pos+1] = '\0';
 		pos = strlen(myFilePathName);
