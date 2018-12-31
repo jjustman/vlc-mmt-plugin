@@ -118,6 +118,52 @@ const char *psz_meta_roots[] = { "/moov/udta/meta/ilst",
                                  "/meta/ilst",
                                  "/udta",
                                  NULL };
+/*
+ * hack
+ *
+ *
+
+/**
+
+ * Ansi C "itoa" based on Kernighan & Ritchie's "Ansi C"
+
+
+ * with slight modification to optimize for specific architecture:
+
+ */
+
+void strreverse(char* begin, char* end) {
+	char aux;
+	while(end>begin)
+		aux=*end, *end--=*begin, *begin++=aux;
+}
+
+void itoa(int value, char* str, int base) {
+
+	static char num[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+	char* wstr=str;
+	int sign;
+	div_t res;
+
+	// Validate base
+	if (base<2 || base>35){ *wstr='\0'; return; }
+
+	// Take care of sign
+	if ((sign=value) < 0) value = -value;
+
+	// Conversion. Number is reversed.
+	do {
+		res = div(value,base);
+		*wstr++ = num[res.rem];
+	}while(value=res.quot);
+
+	if(sign<0) *wstr++='-';
+
+	*wstr='\0';
+
+	// Reverse string
+	strreverse(str,wstr-1);
+}
 
 
 vlc_module_begin ()
@@ -214,7 +260,9 @@ static void LoadChapter( demux_t  *p_demux );
 static int LoadInitFrag( demux_t *p_demux );
 static int __mp4_Demux( demux_t *p_demux );
 
-void dumpBlock(demux_t *p_demux, block_t *mpu);
+void dumpMpu(demux_t *p_demux, block_t *mpu);
+void dumpMfu(demux_t *p_demux, block_t *mpu);
+
 
 
 /*****************************************************************************
@@ -1003,17 +1051,18 @@ static int Demux( demux_t *p_demux )
 
 		msg_Dbg( p_demux, "raw packet size is: %d, first byte: 0x%X", mmtp_raw_packet_size, mmtp_packet_preamble[0]);
 
+		if(false) {
+			char buffer[(mmtp_raw_packet_size * 3)+1];
 
-		char buffer[(mmtp_raw_packet_size * 3)+1];
-
-		for(int i=0; i < mmtp_raw_packet_size; i++) {
-			if(i>1 && (i+1)%8 == 0) {
-				snprintf(buffer + (i*3), 4, "%02X\n", raw_buf[i]);
-			} else {
-				snprintf(buffer + (i*3), 4, "%02X ", raw_buf[i]);
+			for(int i=0; i < mmtp_raw_packet_size; i++) {
+				if(i>1 && (i+1)%8 == 0) {
+					snprintf(buffer + (i*3), 4, "%02X\n", raw_buf[i]);
+				} else {
+					snprintf(buffer + (i*3), 4, "%02X ", raw_buf[i]);
+				}
 			}
+			msg_Info(p_demux, "raw packet payload is:\n%s", buffer);
 		}
-		msg_Info(p_demux, "raw packet payload is:\n%s", buffer);
 
 	    uint8_t mmtp_packet_version = (mmtp_packet_preamble[0] & 0xC0) >> 6;
 	    uint8_t packet_counter_flag = (mmtp_packet_preamble[0] & 0x20) >> 5;
@@ -1268,7 +1317,7 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
 
 			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment with last_mpu_fragment_type==2, mpu_fragment_type==0, flushing to __processFirstMpuFragment");
-		//	dumpBlock(p_demux, mpu);
+			dumpMpu(p_demux, mpu);
 
 
 			//stream_t *orig_stream = p_demux->s;
@@ -1339,7 +1388,7 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 
 		msg_Info(p_demux, "processMpuPacket - NEW p_mpu_block with tmp_mpu_fragment: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
 
-		dumpBlock(p_demux, p_sys->p_mpu_block);
+		dumpMfu(p_demux, p_sys->p_mpu_block);
 
 
 
@@ -1478,21 +1527,106 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fra
 
 }
 
-void dumpBlock(demux_t *p_demux, block_t *mpu) {
+static int __MPU_COUNTER = 0;
+void dumpMpu(demux_t *p_demux, block_t *mpu) {
 
-	msg_Info(p_demux, "::dumpBlock ******* dumping block_t mpu->i_buffer is: %zu, p_buffer[0] is:\n%c", mpu->i_buffer, mpu->p_buffer[0]);
+	msg_Info(p_demux, "::dumpMpu ******* file dump counter_id is: %d", __MPU_COUNTER);
+	//dumping block_t mpu->i_buffer is: %zu, p_buffer[0] is:\n%c", mpu->i_buffer, mpu->p_buffer[0]);
+	if(true) {
+		char *myFilePathName = malloc(sizeof(char)*20);
+		memset(myFilePathName, 0, 20);
+		int pos=0;
 
-	char buffer[mpu->i_buffer * 5+1]; //0x00 |
-									//12345
-	for(int i=0; i < mpu->i_buffer; i++) {
-		if(i>0 && (i+1)%8 == 0) {
-			snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
-		} else {
-			snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
+		strncat(myFilePathName, "mpu/", 4);
+		pos = strlen(myFilePathName);
+		itoa(__MPU_COUNTER++, myFilePathName+pos, 10);
+
+		msg_Info(p_demux, "::dumpMfu ******* file dump __MPU_COUNTER is: %d, file: %s", __MPU_COUNTER-1, myFilePathName);
+
+		FILE *f = fopen(myFilePathName, "w");
+		if(!f) {
+			msg_Err(p_demux, "::dumpMpu ******* UNABLE TO OPEN FILE %s", myFilePathName);
+			return;
 		}
-	//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
+
+		for(int i=0; i < mpu->i_buffer; i++) {
+			fputc(mpu->p_buffer[i], f);
+		}
+		fclose(f);
 	}
-	msg_Info(p_demux, "::dumpBlock ******* dumping block_t mpu->i_buffer is: %zu, p_buffer is:\n%s", mpu->i_buffer, buffer);
+
+	if(false) {
+		char buffer[mpu->i_buffer * 5+1]; //0x00 |
+										//12345
+		for(int i=0; i < mpu->i_buffer; i++) {
+			if(i>0 && (i+1)%32 == 0) {
+				snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
+			} else if(i>0 && (i+1)%8 == 0) {
+				snprintf(buffer + (i*3), 4, "%02X\t ", mpu->p_buffer[i]);
+			} else {
+				snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
+			}
+		//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
+		}
+		msg_Info(p_demux, "::dumpMpu ******* dumping block_t mpu->i_buffer is: %zu, p_buffer is:\n%s", mpu->i_buffer, buffer);
+
+	}
+
+
+}
+
+
+static int __MFU_COUNTER=0;
+
+void dumpMfu(demux_t *p_demux, block_t *mpu) {
+
+	//dumping block_t mpu->i_buffer is: %zu, p_buffer[0] is:\n%c", mpu->i_buffer, mpu->p_buffer[0]);
+	if(true) {
+		char *myFilePathName = malloc(sizeof(char)*20);
+		memset(myFilePathName, 0, 20);
+		int pos = 0;
+
+		strncat(myFilePathName, "mfu/", 4);
+		pos = strlen(myFilePathName);
+		itoa(__MPU_COUNTER, myFilePathName+pos, 10);
+		myFilePathName[pos] = '-';
+		myFilePathName[pos+1] = '\0';
+		pos = strlen(myFilePathName);
+		itoa(__MFU_COUNTER++, myFilePathName+pos, 10);
+
+		msg_Info(p_demux, "::dumpMfu ******* file dump __MPU_COUNTER is: %d, __MFU_COUNTER is: %d, file: %s", __MPU_COUNTER, __MFU_COUNTER-1, myFilePathName);
+
+		FILE *f = fopen(myFilePathName, "w");
+		if(!f) {
+			msg_Err(p_demux, "::dumpMfu ******* UNABLE TO OPEN FILE %s", myFilePathName);
+			return;
+		}
+
+		for(int i=0; i < mpu->i_buffer; i++) {
+			fputc(mpu->p_buffer[i], f);
+		}
+		fclose(f);
+	}
+
+	if(false) {
+		msg_Info(p_demux, "::dumpMfu ******* file dump counter_id is: %d", __MFU_COUNTER);
+
+		char buffer[mpu->i_buffer * 5+1]; //0x00 |
+										//12345
+		for(int i=0; i < mpu->i_buffer; i++) {
+			if(i>0 && (i+1)%32 == 0) {
+				snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
+			} else if(i>0 && (i+1)%8 == 0) {
+				snprintf(buffer + (i*3), 4, "%02X\t ", mpu->p_buffer[i]);
+			} else {
+				snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
+			}
+		//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
+		}
+		msg_Info(p_demux, "::dumpMpu ******* dumping block_t mpu->i_buffer is: %zu, p_buffer is:\n%s", mpu->i_buffer, buffer);
+
+	}
+
 
 }
 
@@ -2840,6 +2974,7 @@ static int DemuxMoov( demux_t *p_demux )
 
     return i_status;
 }
+
 
 static int __mp4_Demux( demux_t *p_demux )
 {
