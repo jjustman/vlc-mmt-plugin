@@ -1241,7 +1241,7 @@ static int Demux( demux_t *p_demux )
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
 
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
-					remainingPacketLen = mmtp_raw_packet_size - (buf-raw_buf);
+					remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
 					msg_Info(p_demux, "%d::mpu_fragment_type!=0x2, remainingPacketLen: %d", __LINE__, remainingPacketLen);
 
 
@@ -1253,7 +1253,7 @@ static int Demux( demux_t *p_demux )
 						//112 bits in aggregate, 14 bytes
 						uint8_t timed_mfu_block[14];
 						buf = extract(buf, &timed_mfu_block, 14);
-						to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
+						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
 
 
 						uint32_t movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
@@ -1269,7 +1269,7 @@ static int Demux( demux_t *p_demux )
 						uint8_t non_timed_mfu_block[4];
 						uint32_t non_timed_mfu_item_id;
 						buf = extract(buf, &non_timed_mfu_block, 4);
-						to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
+						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
 
 						non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
 						msg_Info(p_demux, "mpu mode - non-timed MFU, item_id is: %zu", non_timed_mfu_item_id);
@@ -1283,7 +1283,7 @@ static int Demux( demux_t *p_demux )
 					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
-					remainingPacketLen = mmtp_raw_packet_size - buf-raw_buf;
+					remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
 
 				}
 
