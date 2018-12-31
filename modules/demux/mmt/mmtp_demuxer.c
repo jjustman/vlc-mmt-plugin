@@ -1227,13 +1227,13 @@ static int Demux( demux_t *p_demux )
 					msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:1, to_read_packet_length: %d", __LINE__, to_read_packet_length);
 
 				} else {
-					to_read_packet_length = mmtp_raw_packet_size - ((buf-raw_buf));
+					to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
 					msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:0, raw packet size: %d, buf: %p, raw_buf: %p, to_read_packet_length: %d", __LINE__, mmtp_raw_packet_size, buf, raw_buf, to_read_packet_length);
-
 				}
 
 				if(mpu_fragment_type != 0x2) {
-					//read
+					//read our packet length just as a mpu metadata fragment or movie fragment metadata
+					//read our packet length without any mfu
 					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
 					msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
 
@@ -1241,15 +1241,20 @@ static int Demux( demux_t *p_demux )
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
 
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
-					remainingPacketLen = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
+					remainingPacketLen = mmtp_raw_packet_size - (buf-raw_buf);
+					msg_Info(p_demux, "%d::mpu_fragment_type!=0x2, remainingPacketLen: %d", __LINE__, remainingPacketLen);
+
 
 				} else {
+					//mfu's have time and un-timed additional DU headers, so recalc to_read_packet_len after doing extract
 					//we use the du_header field
 					//parse data unit header here based upon mpu timed flag
 					if(mpu_timed_flag) {
 						//112 bits in aggregate, 14 bytes
 						uint8_t timed_mfu_block[14];
 						buf = extract(buf, &timed_mfu_block, 14);
+						to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
+
 
 						uint32_t movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
 						uint32_t sample_numnber 				= (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
@@ -1264,6 +1269,8 @@ static int Demux( demux_t *p_demux )
 						uint8_t non_timed_mfu_block[4];
 						uint32_t non_timed_mfu_item_id;
 						buf = extract(buf, &non_timed_mfu_block, 4);
+						to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
+
 						non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
 						msg_Info(p_demux, "mpu mode - non-timed MFU, item_id is: %zu", non_timed_mfu_item_id);
 					}
@@ -1276,11 +1283,11 @@ static int Demux( demux_t *p_demux )
 					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
-					remainingPacketLen = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
+					remainingPacketLen = mmtp_raw_packet_size - buf-raw_buf;
 
 				}
 
-	    	} while(mpu_aggregation_flag && remainingPacketLen);
+	    	} while(mpu_aggregation_flag && remainingPacketLen>0);
 
 	    }
 
