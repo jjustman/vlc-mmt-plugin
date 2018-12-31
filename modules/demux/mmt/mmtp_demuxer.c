@@ -1223,10 +1223,13 @@ static int Demux( demux_t *p_demux )
 					uint8_t data_unit_length_block[2];
 					buf = extract(buf, &data_unit_length_block, 2);
 					data_unit_length = (data_unit_length_block[0] << 8) | (data_unit_length_block[1]);
-					msg_Info(p_demux, "mpu_aggregation_flag:1, data_unit_length: %d", data_unit_length);
 					to_read_packet_length = data_unit_length;
+					msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:1, to_read_packet_length: %d", __LINE__, to_read_packet_length);
+
 				} else {
-					to_read_packet_length = mmtp_raw_packet_size - ((buf-raw_buf) * 8);
+					to_read_packet_length = mmtp_raw_packet_size - ((buf-raw_buf));
+					msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:0, raw packet size: %d, buf: %p, raw_buf: %p, to_read_packet_length: %d", __LINE__, mmtp_raw_packet_size, buf, raw_buf, to_read_packet_length);
+
 				}
 
 				if(mpu_fragment_type != 0x2) {
