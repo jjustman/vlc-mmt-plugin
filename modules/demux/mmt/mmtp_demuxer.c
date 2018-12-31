@@ -1249,7 +1249,7 @@ static int Demux( demux_t *p_demux )
 					if(mpu_timed_flag) {
 						//112 bits in aggregate, 14 bytes
 						uint8_t timed_mfu_block[14];
-						extract(buf, &timed_mfu_block, 14); //dont re-position buffer, treat this as a "peek"
+						buf = extract(buf, &timed_mfu_block, 14);
 
 						uint32_t movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
 						uint32_t sample_numnber 				= (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
@@ -2986,8 +2986,8 @@ static int __mp4_Demux( demux_t *p_demux )
     msg_Info(p_demux, "__mp4_Demux:()");
 
     demux_sys_t *p_sys = p_demux->p_sys;
-
-    assert( ! p_sys->b_fragmented );
+//jdj-2018-12-31 - dont care you're de-fragmented as a MPU
+//    assert( ! p_sys->b_fragmented );
 
     msg_Info(p_demux, "__mp4_Demux:before DemuxMoov");
 
