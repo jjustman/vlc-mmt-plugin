@@ -1,0 +1,5 @@
+rm -rf mpu
+rm -rf mfu
+mkdir mpu
+mkdir mfu
+cd ..; ../extras/package/macosx/build.sh -c -j8;  cd bin; lldb ./vlc-osx-static udp://@239.255.10.2:51002
