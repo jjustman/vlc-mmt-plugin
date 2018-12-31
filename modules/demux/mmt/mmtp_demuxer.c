@@ -1219,6 +1219,7 @@ static int Demux( demux_t *p_demux )
 	    		int to_read_packet_length = -1;
 	    		//mpu_fragment_type
 
+	    		//only read DU length if mpu_aggregation_flag=1
 				if(mpu_aggregation_flag) {
 					uint8_t data_unit_length_block[2];
 					buf = extract(buf, &data_unit_length_block, 2);
