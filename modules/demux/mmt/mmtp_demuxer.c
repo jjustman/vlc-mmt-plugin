@@ -118,6 +118,9 @@ const char *psz_meta_roots[] = { "/moov/udta/meta/ilst",
                                  "/meta/ilst",
                                  "/udta",
                                  NULL };
+
+static int __MFU_COUNTER=1;
+
 /*
  * hack
  *
@@ -255,7 +258,11 @@ static int   DemuxFrag( demux_t * );
 static int   Control ( demux_t *, int, va_list );
 
 
-void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment );
+//old sig -
+//void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment );
+void   processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_sequence_number, uint32_t sample_number, uint32_t mpu_offset, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment );
+
+
 static void LoadChapter( demux_t  *p_demux );
 static int LoadInitFrag( demux_t *p_demux );
 static int __mp4_Demux( demux_t *p_demux );
@@ -562,7 +569,7 @@ static int Open( vlc_object_t * p_this )
     p_sys->obj = p_this;
     p_sys->context.i_lastseqnumber = UINT32_MAX;
     p_demux->p_sys = p_sys;
-
+    p_sys->p_mpu_block = NULL;
 
     msg_Info(p_demux, "mmtp_demuxer.open() - complete");
 
@@ -1241,7 +1248,7 @@ static int Demux( demux_t *p_demux )
 					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
 
-					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
+					processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, 0, 0, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
 					remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
 					msg_Info(p_demux, "%d::mpu_fragment_type!=0x2, remainingPacketLen: %d", __LINE__, remainingPacketLen);
 
@@ -1250,6 +1257,10 @@ static int Demux( demux_t *p_demux )
 					//mfu's have time and un-timed additional DU headers, so recalc to_read_packet_len after doing extract
 					//we use the du_header field
 					//parse data unit header here based upon mpu timed flag
+					uint32_t movie_fragment_sequence_number = 0;
+					uint32_t sample_number = 0;
+					uint32_t offset = 0;
+
 					if(mpu_timed_flag) {
 						//112 bits in aggregate, 14 bytes
 						uint8_t timed_mfu_block[14];
@@ -1257,14 +1268,14 @@ static int Demux( demux_t *p_demux )
 						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
 
 
-						uint32_t movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
-						uint32_t sample_numnber 				= (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
-						uint32_t offset 						= (timed_mfu_block[8] << 24) | (timed_mfu_block[9] << 16) | (timed_mfu_block[10] << 8) | (timed_mfu_block[11]);
+						movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
+						sample_number				   = (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
+						offset     					   = (timed_mfu_block[8] << 24) | (timed_mfu_block[9] << 16) | (timed_mfu_block[10] << 8) | (timed_mfu_block[11]);
 						uint8_t priority 						= timed_mfu_block[12];
 						uint8_t dep_counter						= timed_mfu_block[13];
 
 						msg_Info(p_demux, "mpu mode -timed MFU, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
-								movie_fragment_sequence_number, sample_numnber, offset, priority, dep_counter);
+								movie_fragment_sequence_number, sample_number, offset, priority, dep_counter);
 					} else {
 						//only 32 bits
 						uint8_t non_timed_mfu_block[4];
@@ -1283,7 +1294,7 @@ static int Demux( demux_t *p_demux )
 
 					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
-					processMpuPacket(p_demux, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
+					processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, sample_number, offset, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
 					remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
 
 				}
@@ -1297,8 +1308,103 @@ static int Demux( demux_t *p_demux )
 	return VLC_DEMUXER_SUCCESS;
 }
 static int lastPacketId = -1;
+static uint32_t __last_mpu_sequence_number = 0;
 static int last_mpu_fragment_type = -1;
 
+
+
+/**
+ * only flush out mpu packet when our mpq_sequence_id changes
+ */
+
+void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_sequence_number, uint32_t mpu_sample_number, uint32_t mpu_offset, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment ) {
+
+	demux_sys_t *p_sys = p_demux->p_sys;
+    //if we have a new packet id, assume we can send the current payload off
+	if(mmtp_packet_id != 35) {
+		msg_Info(p_demux, "processMpuPacket - returning because mmtp_packet_id!=35, val is %hu", mmtp_packet_id);
+		return;
+	}
+
+	//mpu_sequence_number
+
+
+	msg_Info(p_demux, "processMpuPacket - mmtp_packet_id: %hu, mpu_sequence_number: %u, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %hu",
+											mmtp_packet_id, mpu_sequence_number, mpu_sample_number, mpu_offset, mpu_fragment_type, mpu_fragmentation_indicator);
+
+	if(__last_mpu_sequence_number == 0 && mpu_fragment_type !=0) {
+		msg_Info(p_demux, "processMpuPacket - mmtp_packet_id: %hu, mpu_sequence_number: %u, bailing because __last_mpu_sequence_number is still 0", mmtp_packet_id, mpu_sequence_number);
+
+		return;
+	}
+
+	msg_Info(p_demux, "processMpuPacket before test");
+
+	//only flush out and process the MPU if our sequence number has incremented
+	//TODO - check mmpu box for is_complete for mpu_sequence_number
+	if(mpu_sequence_number > __last_mpu_sequence_number) {
+
+
+		//reset our __MFU_COUNTER for debugging
+		__MFU_COUNTER = 1;
+		//flush out our pending p_mpu block
+		msg_Info(p_demux, "processMpuPacket before test2");
+
+		if(p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer > 0) {
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** to ISOBMFF - last_mpu_sequence_number: %hu, mpu_sequence_number: %hu, pending p_mpu_block is: %zu", __last_mpu_sequence_number, mpu_sequence_number, p_sys->p_mpu_block->i_buffer);
+			block_t* mpu = block_ChainGather(p_sys->p_mpu_block);
+
+			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
+			dumpMpu(p_demux, mpu);
+
+			//stream_t *orig_stream = p_demux->s;
+			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** cloning demux_t");
+
+			demux_t *mp4_demux = malloc(sizeof(demux_t));
+			memcpy((void *)mp4_demux, (void *)p_demux, sizeof(demux_t));
+
+			//swap out p_demux->s with re-encapsulated payload
+			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ************ cloning vlc_stream_MemoryNew");
+			mp4_demux->s = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
+
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - before");
+
+			__processFirstMpuFragment(mp4_demux);
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - complete");
+
+			__mp4_Demux(mp4_demux);
+
+			//clear out block buffer
+
+			block_Release(p_sys->p_mpu_block);
+			p_sys->p_mpu_block = NULL;
+			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** block_Release complete");
+
+		} else {
+			if(p_sys->p_mpu_block) {
+				msg_Warn(p_demux, "processMpuPacket - sequence number change, but p_sys->p_mpu_block->i_buffer is 0, last_mpu_sequence_number: %hu, mpu_sequence_number: %hu, pending p_mpu_block is: %zu", __last_mpu_sequence_number, mpu_sequence_number, p_sys->p_mpu_block->i_buffer);
+			} else {
+				msg_Warn(p_demux, "processMpuPacket - sequence number change, but p_sys->p_mpu_block is not allocated, last_mpu_sequence_number: %hu, mpu_sequence_number: %hu", __last_mpu_sequence_number, mpu_sequence_number);
+			}
+		}
+
+		__last_mpu_sequence_number = mpu_sequence_number;
+	}
+
+	if(tmp_mpu_fragment) {
+		msg_Info(p_demux, "processMpuPacket before test3");
+
+		msg_Info(p_demux, "processMpuPacket - before p_mpu_block with tmp_mpu_fragment: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
+
+		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
+		p_sys->p_mpu_block = block_ChainGather(p_sys->p_mpu_block);
+
+		msg_Info(p_demux, "processMpuPacket - NEW p_mpu_block with tmp_mpu_fragment: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
+
+		dumpMfu(p_demux, p_sys->p_mpu_block);
+		last_mpu_fragment_type = mpu_fragment_type;
+	}
+}
 
 /*** we must start with a:
  * 	 fragment_type cadence of 0 -> 1 -> 2,
@@ -1309,7 +1415,7 @@ static int last_mpu_fragment_type = -1;
  *assume packet_id=35
  *
  */
-void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment ) {
+void processMpuPacketSingleFragmentIncorrect(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment ) {
 
 	demux_sys_t *p_sys = p_demux->p_sys;
     //if we have a new packet id, assume we can send the current payload off
@@ -1550,7 +1656,7 @@ void dumpMpu(demux_t *p_demux, block_t *mpu) {
 
 		strncat(myFilePathName, "mpu/", 4);
 		pos = strlen(myFilePathName);
-		itoa(__MPU_COUNTER++, myFilePathName+pos, 10);
+		itoa(__last_mpu_sequence_number, myFilePathName+pos, 10);
 
 		msg_Info(p_demux, "::dumpMfu ******* file dump __MPU_COUNTER is: %d, file: %s", __MPU_COUNTER-1, myFilePathName);
 
@@ -1587,8 +1693,10 @@ void dumpMpu(demux_t *p_demux, block_t *mpu) {
 }
 
 
-static int __MFU_COUNTER=0;
 
+/** todo:
+ * change this to proper samples
+ */
 void dumpMfu(demux_t *p_demux, block_t *mpu) {
 
 	//dumping block_t mpu->i_buffer is: %zu, p_buffer[0] is:\n%c", mpu->i_buffer, mpu->p_buffer[0]);
@@ -1599,7 +1707,7 @@ void dumpMfu(demux_t *p_demux, block_t *mpu) {
 
 		strncat(myFilePathName, "mfu/", 4);
 		pos = strlen(myFilePathName);
-		itoa(__MPU_COUNTER, myFilePathName+pos, 10);
+		itoa(__last_mpu_sequence_number, myFilePathName+pos, 10);
 		pos = strlen(myFilePathName);
 
 		myFilePathName[pos] = '-';
