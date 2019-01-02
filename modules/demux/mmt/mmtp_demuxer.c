@@ -248,6 +248,7 @@ typedef struct
     } hacks;
 
     mp4_fragments_index_t *p_fragsindex;
+    stream_t *s_frag;
 } demux_sys_t;
 
 
@@ -562,9 +563,9 @@ static int Open( vlc_object_t * p_this )
           return VLC_EGENERIC;
 
 // no seeking   /* I need to seek */
-//       vlc_stream_Control( p_demux->s, STREAM_CAN_SEEK, &p_sys->b_seekable );
+//       vlc_stream_Control( p_sys->s_frag, STREAM_CAN_SEEK, &p_sys->b_seekable );
 //       if( p_sys->b_seekable )
-//           vlc_stream_Control( p_demux->s, STREAM_CAN_FASTSEEK, &p_sys->b_fastseekable );
+//           vlc_stream_Control( p_sys->s_frag, STREAM_CAN_FASTSEEK, &p_sys->b_fastseekable );
 
     p_sys->obj = p_this;
     p_sys->context.i_lastseqnumber = UINT32_MAX;
@@ -589,28 +590,24 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 
     bool      b_enabled_es;
 
-
 	//TODO - we may need to do this with every MPU
 	//
 
 	if( LoadInitFrag( p_demux ) != VLC_SUCCESS )
 	           goto error;
 
-    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxDumpStructure");
-    MP4_BoxDumpStructure( p_demux->s, p_sys->p_root );
+//    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxDumpStructure");
+//   // MP4_BoxDumpStructure( p_demux->s, p_sys->p_root );
 
-	//todo
-    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxGet");
-	p_sys->p_moov = MP4_BoxGet( p_sys->p_root, "/moov" );
+//    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxGet: /moov");
+//	p_sys->p_moov = MP4_BoxGet( p_sys->p_root, "/moov" );
+//
+//    msg_Info(p_demux, "__processFirstMpuFragment:before LoadInitFrag");
+//
+//	if( LoadInitFrag( p_demux ) != VLC_SUCCESS )
+//		goto error;
 
-    msg_Info(p_demux, "__processFirstMpuFragment:before LoadInitFrag");
-
-	if( LoadInitFrag( p_demux ) != VLC_SUCCESS )
-		goto error;
-
-    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxGet-2nd");
-
-	MP4_BoxDumpStructure( p_demux->s, p_sys->p_root );
+    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxGet: /ftyp");
 
 	if( ( p_ftyp = MP4_BoxGet( p_sys->p_root, "/ftyp" ) ) )
 	{
@@ -666,7 +663,7 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 		msg_Dbg( p_demux, "file type box missing (assuming ISO Media)" );
 	}
 
-    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxGet/moov");
+    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxGet /moov");
 
 	/* the file need to have one moov box */
 	p_sys->p_moov = MP4_BoxGet( p_sys->p_root, "/moov" );
@@ -682,7 +679,7 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 		p_sys->p_moov->i_type = ATOM_moov;
 	}
 
-    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxGet/mvhd");
+    msg_Info(p_demux, "__processFirstMpuFragment:before MP4_BoxGet /moov/mvhd");
 
 	p_mvhd = MP4_BoxGet( p_sys->p_moov, "mvhd" );
 	if( p_mvhd && BOXDATA(p_mvhd) && BOXDATA(p_mvhd)->i_timescale )
@@ -697,102 +694,79 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 		goto error;
 	}
 
-	MP4_Box_t *p_rmra = MP4_BoxGet( p_sys->p_root, "/moov/rmra" );
-	if( p_rmra != NULL && p_demux->p_input_item != NULL )
-	{
-		int        i_count = MP4_BoxCount( p_rmra, "rmda" );
-		int        i;
+//	MP4_Box_t *p_rmra = MP4_BoxGet( p_sys->p_root, "/moov/rmra" );
+//	if( p_rmra != NULL && p_demux->p_input_item != NULL )
+//	{
+//		int        i_count = MP4_BoxCount( p_rmra, "rmda" );
+//		int        i;
+//
+//		msg_Dbg( p_demux, "detected playlist mov file (%d ref)", i_count );
+//
+//		input_item_t *p_current = p_demux->p_input_item;
+//
+//		input_item_node_t *p_subitems = input_item_node_Create( p_current );
+//
+//		for( i = 0; i < i_count; i++ )
+//		{
+//			MP4_Box_t *p_rdrf = MP4_BoxGet( p_rmra, "rmda[%d]/rdrf", i );
+//			char      *psz_ref;
+//			uint32_t  i_ref_type;
+//
+//			if( !p_rdrf || !BOXDATA(p_rdrf) || !( psz_ref = strdup( BOXDATA(p_rdrf)->psz_ref ) ) )
+//			{
+//				continue;
+//			}
+//			i_ref_type = BOXDATA(p_rdrf)->i_ref_type;
+//
+//			msg_Dbg( p_demux, "new ref=`%s' type=%4.4s",
+//					 psz_ref, (char*)&i_ref_type );
+//
+//			if( i_ref_type == VLC_FOURCC( 'u', 'r', 'l', ' ' ) )
+//			{
+//				if( strstr( psz_ref, "qt5gateQT" ) )
+//				{
+//					msg_Dbg( p_demux, "ignoring pseudo ref =`%s'", psz_ref );
+//					free( psz_ref );
+//					continue;
+//				}
+//				if( !strncmp( psz_ref, "http://", 7 ) ||
+//					!strncmp( psz_ref, "rtsp://", 7 ) )
+//				{
+//					;
+//				}
+//				else
+//				{
+//					char *psz_absolute = vlc_uri_resolve( p_demux->psz_url,
+//														  psz_ref );
+//					msg_Dbg( p_demux, "%d, calling free on psz_ref: %p", __LINE__, (void*)psz_ref);
+//
+//					free( psz_ref );
+//					if( psz_absolute == NULL )
+//					{
+//						input_item_node_Delete( p_subitems );
+//						return VLC_ENOMEM;
+//					}
+//					psz_ref = psz_absolute;
+//				}
+//				msg_Dbg( p_demux, "adding ref = `%s'", psz_ref );
+//				input_item_t *p_item = input_item_New( psz_ref, NULL );
+//				input_item_CopyOptions( p_item, p_current );
+//				input_item_node_AppendItem( p_subitems, p_item );
+//				input_item_Release( p_item );
+//			}
+//			else
+//			{
+//				msg_Err( p_demux, "unknown ref type=%4.4s FIXME (send a bug report)",
+//						 (char*)&BOXDATA(p_rdrf)->i_ref_type );
+//			}
+//			free( psz_ref );
+//		}
+//
+//		/* FIXME: create a stream_filter sub-module for this */
+//		if (es_out_Control(p_demux->out, ES_OUT_POST_SUBNODE, p_subitems))
+//			input_item_node_Delete(p_subitems);
+//	}
 
-		msg_Dbg( p_demux, "detected playlist mov file (%d ref)", i_count );
-
-		input_item_t *p_current = p_demux->p_input_item;
-
-		input_item_node_t *p_subitems = input_item_node_Create( p_current );
-
-		for( i = 0; i < i_count; i++ )
-		{
-			MP4_Box_t *p_rdrf = MP4_BoxGet( p_rmra, "rmda[%d]/rdrf", i );
-			char      *psz_ref;
-			uint32_t  i_ref_type;
-
-			if( !p_rdrf || !BOXDATA(p_rdrf) || !( psz_ref = strdup( BOXDATA(p_rdrf)->psz_ref ) ) )
-			{
-				continue;
-			}
-			i_ref_type = BOXDATA(p_rdrf)->i_ref_type;
-
-			msg_Dbg( p_demux, "new ref=`%s' type=%4.4s",
-					 psz_ref, (char*)&i_ref_type );
-
-			if( i_ref_type == VLC_FOURCC( 'u', 'r', 'l', ' ' ) )
-			{
-				if( strstr( psz_ref, "qt5gateQT" ) )
-				{
-					msg_Dbg( p_demux, "ignoring pseudo ref =`%s'", psz_ref );
-					free( psz_ref );
-					continue;
-				}
-				if( !strncmp( psz_ref, "http://", 7 ) ||
-					!strncmp( psz_ref, "rtsp://", 7 ) )
-				{
-					;
-				}
-				else
-				{
-					char *psz_absolute = vlc_uri_resolve( p_demux->psz_url,
-														  psz_ref );
-					msg_Dbg( p_demux, "%d, calling free on psz_ref: %p", __LINE__, (void*)psz_ref);
-
-					free( psz_ref );
-					if( psz_absolute == NULL )
-					{
-						input_item_node_Delete( p_subitems );
-						return VLC_ENOMEM;
-					}
-					psz_ref = psz_absolute;
-				}
-				msg_Dbg( p_demux, "adding ref = `%s'", psz_ref );
-				input_item_t *p_item = input_item_New( psz_ref, NULL );
-				input_item_CopyOptions( p_item, p_current );
-				input_item_node_AppendItem( p_subitems, p_item );
-				input_item_Release( p_item );
-			}
-			else
-			{
-				msg_Err( p_demux, "unknown ref type=%4.4s FIXME (send a bug report)",
-						 (char*)&BOXDATA(p_rdrf)->i_ref_type );
-			}
-			free( psz_ref );
-		}
-
-		/* FIXME: create a stream_filter sub-module for this */
-		if (es_out_Control(p_demux->out, ES_OUT_POST_SUBNODE, p_subitems))
-			input_item_node_Delete(p_subitems);
-	}
-
-	if( !(p_mvhd = MP4_BoxGet( p_sys->p_root, "/moov/mvhd" ) ) )
-	{
-		if( !p_rmra )
-		{
-			msg_Err( p_demux, "cannot find /moov/mvhd" );
-			goto error;
-		}
-		else
-		{
-			msg_Warn( p_demux, "cannot find /moov/mvhd (pure ref file)" );
-			//p_demux->pf_demux = DemuxRef;
-			return VLC_SUCCESS;
-		}
-	}
-	else
-	{
-		p_sys->i_timescale = BOXDATA(p_mvhd)->i_timescale;
-		if( p_sys->i_timescale == 0 )
-		{
-			msg_Err( p_demux, "bad timescale" );
-			goto error;
-		}
-	}
 
 	const unsigned i_tracks = MP4_BoxCount( p_sys->p_root, "/moov/trak" );
 	if( i_tracks < 1 )
@@ -805,29 +779,28 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 	if( CreateTracks( p_demux, i_tracks ) != VLC_SUCCESS )
 		goto error;
 
-	/* Search the first chap reference (like quicktime) and
-	 * check that at least 1 stream is enabled */
-	p_sys->p_tref_chap = NULL;
-	b_enabled_es = false;
-	for( unsigned i = 0; i < p_sys->i_tracks; i++ )
-	{
-		MP4_Box_t *p_trak = MP4_BoxGet( p_sys->p_root, "/moov/trak[%d]", i );
-
-
-		MP4_Box_t *p_tkhd = MP4_BoxGet( p_trak, "tkhd" );
-		if( p_tkhd && BOXDATA(p_tkhd) && (BOXDATA(p_tkhd)->i_flags&MP4_TRACK_ENABLED) )
-			b_enabled_es = true;
-
-		MP4_Box_t *p_chap = MP4_BoxGet( p_trak, "tref/chap", i );
-		if( p_chap && p_chap->data.p_tref_generic &&
-			p_chap->data.p_tref_generic->i_entry_count > 0 && !p_sys->p_tref_chap )
-			p_sys->p_tref_chap = p_chap;
-	}
+//	/* Search the first chap reference (like quicktime) and
+//	 * check that at least 1 stream is enabled */
+//	p_sys->p_tref_chap = NULL;
+//	b_enabled_es = false;
+//	for( unsigned i = 0; i < p_sys->i_tracks; i++ )
+//	{
+//		MP4_Box_t *p_trak = MP4_BoxGet( p_sys->p_root, "/moov/trak[%d]", i );
+//
+//		MP4_Box_t *p_tkhd = MP4_BoxGet( p_trak, "tkhd" );
+//		if( p_tkhd && BOXDATA(p_tkhd) && (BOXDATA(p_tkhd)->i_flags&MP4_TRACK_ENABLED) )
+//			b_enabled_es = true;
+//
+//		MP4_Box_t *p_chap = MP4_BoxGet( p_trak, "tref/chap", i );
+//		if( p_chap && p_chap->data.p_tref_generic &&
+//			p_chap->data.p_tref_generic->i_entry_count > 0 && !p_sys->p_tref_chap )
+//			p_sys->p_tref_chap = p_chap;
+//	}
 
 	/* Set and store metadata */
-	if( (p_sys->p_meta = vlc_meta_New()) )
-		MP4_LoadMeta( p_sys, p_sys->p_meta );
-
+//	if( (p_sys->p_meta = vlc_meta_New()) )
+//		MP4_LoadMeta( p_sys, p_sys->p_meta );
+//
 	/* now process each track and extract all useful information */
 	for( unsigned i = 0; i < p_sys->i_tracks; i++ )
 	{
@@ -900,7 +873,7 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 				ProbeFragments( p_demux, (p_sys->i_duration == 0), &p_sys->b_fragmented );
 			}
 
-			if( vlc_stream_Seek( p_demux->s, p_sys->p_moov->i_pos ) != VLC_SUCCESS )
+			if( vlc_stream_Seek( p_sys->s_frag, p_sys->p_moov->i_pos ) != VLC_SUCCESS )
 				goto error;
 		}
 		else /* Handle as fragmented by default as we can't see moof */
@@ -935,7 +908,7 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 //	}
 
 	/* */
-	LoadChapter( p_demux );
+	//LoadChapter( p_demux );
 
 	p_sys->asfpacketsys.p_demux = p_demux;
 	p_sys->asfpacketsys.pi_preroll = &p_sys->i_preroll;
@@ -1015,11 +988,20 @@ void* extract(uint8_t *bufPosPtr, uint8_t *dest, int size) {
 	return bufPosPtr;
 }
 
+/**
+ *
+ * mmtp demuxer,
+ *
+ * use p_sys->s for udp,
+ * use p_sys->s_frag for fragmented mp4 demux / decoding
+ *
+ */
+
 static int Demux( demux_t *p_demux )
 {
 	demux_sys_t *p_sys = p_demux->p_sys;
 
-    msg_Info(p_demux, "mmtp_demuxer.demux()");
+//    msg_Info(p_demux, "mmtp_demuxer.demux()");
 
     /* Get a new MMTP packet, use p_demux->s as the blocking reference and 1514 as the max mtu in udp.c*/
     //	vlc_stream_Block will try and fill MAX_MTU_SIZE instead of relying on the
@@ -1040,7 +1022,7 @@ static int Demux( demux_t *p_demux )
 	}
 
     mmtp_raw_packet_size =  read_block->i_buffer;
-    msg_Info(p_demux, "mmtp_demuxer: vlc_stream_readblock size is: %d", read_block->i_buffer);
+   // msg_Info(p_demux, "mmtp_demuxer: vlc_stream_readblock size is: %d", read_block->i_buffer);
 
 	if( mmtp_raw_packet_size > MAX_MMTP_SIZE || mmtp_raw_packet_size < MIN_MMTP_SIZE) {
 		msg_Err( p_demux, "mmtp_demuxer - size from UDP was under/over heureis/max, dropping %d bytes", mmtp_raw_packet_size);
@@ -1056,7 +1038,7 @@ static int Demux( demux_t *p_demux )
 		buf = extract(buf, mmtp_packet_preamble, 20);
 		//msg_Warn( p_demux, "buf pos is now %p vs %p", new_buf_pos, (void *)buf);
 
-		msg_Dbg( p_demux, "raw packet size is: %d, first byte: 0x%X", mmtp_raw_packet_size, mmtp_packet_preamble[0]);
+//		msg_Dbg( p_demux, "raw packet size is: %d, first byte: 0x%X", mmtp_raw_packet_size, mmtp_packet_preamble[0]);
 
 		if(false) {
 			char buffer[(mmtp_raw_packet_size * 3)+1];
@@ -1243,7 +1225,7 @@ static int Demux( demux_t *p_demux )
 					//read our packet length just as a mpu metadata fragment or movie fragment metadata
 					//read our packet length without any mfu
 					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
-					msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
+//					msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
 
 					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
@@ -1386,7 +1368,7 @@ static int Demux( demux_t *p_demux )
 					//msg_Dbg( p_demux, "before reading fragment packet:  %p", (void*)p_sys->p_mpu_block);
 
 					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
-					msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
+					//msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
 
 					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
@@ -1408,6 +1390,7 @@ static int Demux( demux_t *p_demux )
 static int lastPacketId = -1;
 static uint32_t __last_mpu_sequence_number = 0;
 static int last_mpu_fragment_type = -1;
+static int has_called_mp4_ftyp_demuxer = 0;
 
 
 
@@ -1424,59 +1407,62 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
 		return;
 	}
 
-	//mpu_sequence_number
-
-
-	msg_Info(p_demux, "processMpuPacket - mmtp_packet_id: %hu, mpu_sequence_number: %u, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %hu",
-											mmtp_packet_id, mpu_sequence_number, mpu_sample_number, mpu_offset, mpu_fragment_type, mpu_fragmentation_indicator);
-
 	if(__last_mpu_sequence_number == 0 && mpu_fragment_type !=0) {
 		msg_Info(p_demux, "processMpuPacket - mmtp_packet_id: %hu, mpu_sequence_number: %u, bailing because __last_mpu_sequence_number is still 0", mmtp_packet_id, mpu_sequence_number);
 
 		return;
 	}
 
-	msg_Info(p_demux, "processMpuPacket before test");
+	//mpu_sequence_number
+
+	msg_Info(p_demux, "processMpuPacket - mmtp_packet_id: %hu, mpu_sequence_number: %u, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %hu, p_mpu_block is: %p",
+											mmtp_packet_id, mpu_sequence_number, mpu_sample_number, mpu_offset, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block);
 
 	//only flush out and process the MPU if our sequence number has incremented
 	//TODO - check mmpu box for is_complete for mpu_sequence_number
 	if(mpu_sequence_number > __last_mpu_sequence_number) {
 
-
 		//reset our __MFU_COUNTER for debugging
 		__MFU_COUNTER = 1;
 		//flush out our pending p_mpu block
-		msg_Info(p_demux, "processMpuPacket before test2");
 
 		if(p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer > 0) {
 			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** to ISOBMFF - last_mpu_sequence_number: %hu, mpu_sequence_number: %hu, pending p_mpu_block is: %zu", __last_mpu_sequence_number, mpu_sequence_number, p_sys->p_mpu_block->i_buffer);
 			block_t* mpu = block_ChainGather(p_sys->p_mpu_block);
 
-			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
+		//	msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
 			dumpMpu(p_demux, mpu);
 
 			//stream_t *orig_stream = p_demux->s;
-			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** cloning demux_t");
+		//	msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** cloning demux_t");
+/** fix me to not memcpy **/
 
-			demux_t *mp4_demux = malloc(sizeof(demux_t));
-			memcpy((void *)mp4_demux, (void *)p_demux, sizeof(demux_t));
+//			demux_t *mp4_demux = malloc(sizeof(demux_t));
+//			memcpy((void *)mp4_demux, (void *)p_demux, sizeof(demux_t));
 
-			//swap out p_demux->s with re-encapsulated payload
-			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ************ cloning vlc_stream_MemoryNew");
-			mp4_demux->s = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
+		//swap out p_demux->s with re-encapsulated payload
+		//	msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ************ cloning vlc_stream_MemoryNew");
+			p_sys->s_frag = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
 
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - before");
+	//		msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - before");
+	//todo, see if this is needed.....
 
-			__processFirstMpuFragment(mp4_demux);
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - complete");
+			if(!has_called_mp4_ftyp_demuxer) {
+				__processFirstMpuFragment(p_demux);
+			}
+			has_called_mp4_ftyp_demuxer = 1;
 
-			__mp4_Demux(mp4_demux);
+			//		msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - complete");
+
+			//__mp4_Demux(mp4_demux);
+			//use the fragmented demuxer
+			DemuxFrag(p_demux);
 
 			//clear out block buffer
 
 			block_Release(p_sys->p_mpu_block);
 			p_sys->p_mpu_block = NULL;
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** block_Release complete");
+		//	msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** block_Release complete");
 
 		} else {
 			if(p_sys->p_mpu_block) {
@@ -1490,9 +1476,8 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
 	}
 
 	if(tmp_mpu_fragment) {
-		msg_Info(p_demux, "processMpuPacket before test3");
 
-		msg_Info(p_demux, "processMpuPacket - before p_mpu_block with mpu_sequence_number: %hu, mpu_sample_number: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p,", mpu_sequence_number, mpu_sample_number, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block);;
+//		msg_Info(p_demux, "processMpuPacket - before p_mpu_block with mpu_sequence_number: %hu, mpu_sample_number: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p,", mpu_sequence_number, mpu_sample_number, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block);
 		dumpMfu(p_demux, tmp_mpu_fragment);
 
 		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
@@ -1504,248 +1489,11 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
 	}
 }
 
-/*** we must start with a:
- * 	 fragment_type cadence of 0 -> 1 -> 2,
- * 	 	grouped by packet_id, media_sequence_number
- * 	 	 ordered by packet_sequence_number
- *
- *
- *assume packet_id=35
- *
- */
-void processMpuPacketSingleFragmentIncorrect(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment ) {
-
-	demux_sys_t *p_sys = p_demux->p_sys;
-    //if we have a new packet id, assume we can send the current payload off
-	if(mmtp_packet_id != 35) {
-		msg_Info(p_demux, "processMpuPacket - returning because mmtp_packet_id!=35, val is %hu", mmtp_packet_id);
-		return;
-	}
-
-	if(last_mpu_fragment_type == 2 && mpu_fragment_type==0) {
-
-		//this is a mpu re-initialization, check if we have mfu's buffered?
-		if(p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer > 0) {
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** to ISOBMFF - last_mpu_fragment_type==2, mpu_fragment_type==0, pending p_mpu_block is: %zu", p_sys->p_mpu_block->i_buffer);
-			block_t* mpu = block_ChainGather(p_sys->p_mpu_block);
-
-			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
-
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment with last_mpu_fragment_type==2, mpu_fragment_type==0, flushing to __processFirstMpuFragment");
-			dumpMpu(p_demux, mpu);
-
-
-			//stream_t *orig_stream = p_demux->s;
-			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** cloning demux_t");
-
-			demux_t *mp4_demux = malloc(sizeof(demux_t));
-			memcpy((void *)mp4_demux, (void *)p_demux, sizeof(demux_t));
-
-			//swap out p_demux->s with re-encapsulated payload
-			msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ************ cloning vlc_stream_MemoryNew");
-
-			mp4_demux->s = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
-
-
-
-//			msg_Info(p_demux, "processMpuPacket ******* dumping p_buffer: mpu->i_buffer is: %zu length: ", mpu->i_buffer);
-//			char buffer[mpu->i_buffer * 5+1]; //0x00 |
-
-//
-//											//12345
-//			for(int i=0; i < mpu->i_buffer; i++) {
-//				if(i>0 && (i-1)%8 == 0) {
-//					snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
-//				} else {
-//					snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
-//				}
-//			//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
-//			}
-//			msg_Info(mp4_demux, "processMpuPacket ******* p_buffer is:\n%s", buffer);
-
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - before");
-
-			__processFirstMpuFragment(mp4_demux);
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** __processFirstMpuFragment - complete");
-
-			__mp4_Demux(mp4_demux);
-
-			//clear out block buffer
-			//block_Release(p_sys->p_mpu_block);
-			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** block_Release complete");
-
-
-
-		} else {
-			msg_Info(p_demux, "processMpuPacket - last_mpu_fragment_type==2, mpu_fragment_type==0, but no pending p_mpu_block, not flushing to isobmff, discarding");
-		}
-
-		p_sys->p_mpu_block = NULL;
-
-		//push this fragment to libmp4
-
-	}
-
-	if(mpu_fragment_type == 0) {
-		if(p_sys->p_mpu_block != NULL) {
-			block_Release(p_sys->p_mpu_block);
-		}
-		//create a new  building up p_mpu_vlock
-		//don't realloc here
-		//p_sys->p_mpu_block = block_Alloc(MAX_MMT_REFRAGMENT_SIZE);
-
-		//hack??
-		p_sys->p_mpu_block = NULL;
-
-
-		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
-		p_sys->p_mpu_block = block_ChainGather(p_sys->p_mpu_block);
-
-		msg_Info(p_demux, "processMpuPacket - NEW p_mpu_block with tmp_mpu_fragment: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
-
-		dumpMfu(p_demux, p_sys->p_mpu_block);
-
-
-
-		//copy MPU metadata
-
-
-	} else if ((mpu_fragment_type == 1 || mpu_fragment_type == 2)  && p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer >0) {
-		//copy in either movie fragment metadata or MFU payloads
-
-		dumpMfu(p_demux, tmp_mpu_fragment);
-		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
-
-		//try and re-gather after appending to gate accurate counts?
-		p_sys->p_mpu_block = block_ChainGather(p_sys->p_mpu_block);
-		msg_Info(p_demux, "processMpuPacket - APPENDING packet_id: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, tmp_mpu_fragment size is: %d, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, tmp_mpu_fragment->i_buffer, p_sys->p_mpu_block->i_buffer );
-
-		//append
-	} else {
-		msg_Warn(p_demux, "processMpuPacket - DISCARDING packet_id: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block);
-
-	}
-
-	last_mpu_fragment_type = mpu_fragment_type;
-
-//
-//    if(mmtp_packet_id >= lastPacketId) {
-//    	//send off if we have a pending mpu block
-//    	if(p_sys->p_mpu_block  && p_sys->p_mpu_block->i_buffer > 0)  {
-//    		msg_Info(p_demux, "sending p_mpu_block to inline mp4 demuxer, size: %zu", p_sys->p_mpu_block->i_buffer);
-//
-//    		//TODO - either VLC_API stream_t *vlc_stream_fifo_New(vlc_object_t *parent);
-//    		block_t* mpu = block_ChainGather(p_sys->p_mpu_block);
-//    		//or VLC_API stream_t *vlc_stream_MemoryNew(vlc_object_t *obj, uint8_t *base,
-//
-//    		msg_Info(p_demux, "mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
-//
-//    		//stream_t *orig_stream = p_demux->s;
-//    		msg_Info(p_demux, "cloning demux_t");
-//
-//    		demux_t *mp4_demux = malloc(sizeof(demux_t));
-//    		memcpy((void *)mp4_demux, (void *)p_demux, sizeof(demux_t));
-//
-//    		//swap out p_demux->s with re-encapsulated payload
-//    		msg_Info(p_demux, "cloning vlc_stream_MemoryNew");
-//
-//    		mp4_demux->s = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
-//
-//    		msg_Info(p_demux, "dumping p_buffer: mpu->i_buffer is: %zu length: ", mpu->i_buffer);
-//    		char buffer[mpu->i_buffer * 5+1]; //0x00 |
-//    										//12345
-//    		for(int i=0; i < mpu->i_buffer; i++) {
-//    			if(i>0 && (i-1)%8 == 0) {
-//    				snprintf(buffer + (i*3), 4, "%02X\n ", mpu->p_buffer[i]);
-//    			} else {
-//    				snprintf(buffer + (i*3), 4, "%02X ", mpu->p_buffer[i]);
-//    			}
-//    		//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
-//    		}
-//    		msg_Info(mp4_demux, "p_buffer is:\n%s", buffer);
-//
-//    		__processFirstMpuFragment(mp4_demux);
-//    		__mp4_Demux(mp4_demux);
-//
-//    		//clear out block buffer
-//    		block_Release(p_sys->p_mpu_block);
-//
-//    		p_sys->p_mpu_block = NULL;
-//
-//
-//			//vlc_demux_chained_Send(p_sys->p_out_muxed, p_sys->p_mpu_block);
-//			//unsigned update = UINT_MAX;
-//			//vlc_demux_chained_Control(p_sys->p_out_muxed, DEMUX_TEST_AND_CLEAR_FLAGS, &update);
-//			//p_sys->update_chained = 1;
-//    	}
-//
-//    	p_sys->p_mpu_block = block_Alloc(MAX_MMTP_SIZE);
-//
-//		msg_Info(p_demux, "%d:: creating new p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block",__LINE__, mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
-//
-//		msg_Info(p_demux, "%d:: mpu block i_buffer is: %zu length, first four are: 0x%x 0x%x 0x%x 0x%x ", __LINE__, tmp_mpu_fragment->i_buffer, tmp_mpu_fragment->p_buffer[0], tmp_mpu_fragment->p_buffer[1], tmp_mpu_fragment->p_buffer[2], tmp_mpu_fragment->p_buffer[3]);
-//
-//		//p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
-//	    block_ChainAppend(&p_sys->p_mpu_block, tmp_mpu_fragment);
-//
-//		lastPacketId = mmtp_packet_id;
-//
-//    } else {
-//		msg_Info(p_demux, "appending p_mpu_block packetId: %hu, fragmentType: %d, fragmentationIndicator: %d, appending tmp_mpu_fragement to p_mpu_block", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator);
-//
-//		msg_Info(p_demux, "%d:: mpu block i_buffer is: %zu length, first four are: 0x%x 0x%x 0x%x 0x%x ", __LINE__, tmp_mpu_fragment->i_buffer, tmp_mpu_fragment->p_buffer[0], tmp_mpu_fragment->p_buffer[1], tmp_mpu_fragment->p_buffer[2], tmp_mpu_fragment->p_buffer[3]);
-//
-//    	//append
-//		block_ChainAppend(&p_sys->p_mpu_block, tmp_mpu_fragment);
-//
-//    }
-//    return;
-//
-//	if(mpu_fragmentation_indicator == 0) {
-//		msg_Info(p_demux, "mpu_fragmentation_indicator = 0, pushing tmp_mpu_fragement to fifo");
-//
-//		//push to fifo
-//		vlc_demux_chained_Send(p_sys->p_out_muxed, tmp_mpu_fragment);
-//
-//	//		block_Release(tmp_mpu_fragment);
-//
-//	} else if(mpu_fragmentation_indicator == 1) {
-//		//start of a new packet
-//		if(p_sys->p_mpu_block) {
-//			msg_Err(p_demux, " fragmentation_indicator is 1 but p_sys->p_mpu_block not null?");
-//			vlc_demux_chained_Send(p_sys->p_out_muxed, block_ChainGather(p_sys->p_mpu_block));
-//		} else {
-//			msg_Info(p_demux, "appending - mpu_fragmentation_indicator == 1");
-//		}
-//		p_sys->p_mpu_block = block_Duplicate(tmp_mpu_fragment);
-//
-//	} else if (mpu_fragmentation_indicator == 2) {
-//		//middle of fragment, but must drop if we don't have a p_mpu_block pending
-//		if(p_sys->p_mpu_block) {
-//			block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
-//			msg_Info(p_demux, "appending - mpu_fragmentation_indicator == 2");
-//		} else {
-//			msg_Warn(p_demux, "DROPPING mpu_fragmentation_indicator==2 but no active p_mpu_block");
-//		}
-//	} else if(mpu_fragmentation_indicator == 3) {
-//		if(p_sys->p_mpu_block) {
-//			block_ChainAppend(p_sys->p_mpu_block, tmp_mpu_fragment);
-//			//append and gather and push - completion of fragment, push to fifo
-//			vlc_demux_chained_Send(p_sys->p_out_muxed, block_ChainGather(p_sys->p_mpu_block));
-//			//block_chainGather will release
-//			p_sys->p_mpu_block = NULL;
-//		} else {
-//			msg_Warn(p_demux, "DROPPING mpu_fragmentation_indicator==3 but no active p_mpu_block");
-//		}
-//	}
-
-
-}
 
 static int __MPU_COUNTER = 0;
 void dumpMpu(demux_t *p_demux, block_t *mpu) {
 
-	msg_Info(p_demux, "::dumpMpu ******* file dump counter_id is: %d", __MPU_COUNTER);
+//	msg_Info(p_demux, "::dumpMpu ******* file dump counter_id is: %d", __MPU_COUNTER);
 	//dumping block_t mpu->i_buffer is: %zu, p_buffer[0] is:\n%c", mpu->i_buffer, mpu->p_buffer[0]);
 	if(true) {
 		char *myFilePathName = malloc(sizeof(char)*20);
@@ -1756,7 +1504,7 @@ void dumpMpu(demux_t *p_demux, block_t *mpu) {
 		pos = strlen(myFilePathName);
 		itoa(__last_mpu_sequence_number, myFilePathName+pos, 10);
 
-		msg_Info(p_demux, "::dumpMfu ******* file dump __MPU_COUNTER is: %d, file: %s", __MPU_COUNTER-1, myFilePathName);
+	//	msg_Info(p_demux, "::dumpMfu ******* file dump __MPU_COUNTER is: %d, file: %s", __MPU_COUNTER-1, myFilePathName);
 
 		FILE *f = fopen(myFilePathName, "w");
 		if(!f) {
@@ -1783,7 +1531,7 @@ void dumpMpu(demux_t *p_demux, block_t *mpu) {
 			}
 		//	msg_Info(mp4_demux, "%02X ", mpu->p_buffer[i]);
 		}
-		msg_Info(p_demux, "::dumpMpu ******* dumping block_t mpu->i_buffer is: %zu, p_buffer is:\n%s", mpu->i_buffer, buffer);
+//		msg_Info(p_demux, "::dumpMpu ******* dumping block_t mpu->i_buffer is: %zu, p_buffer is:\n%s", mpu->i_buffer, buffer);
 
 	}
 
@@ -1813,7 +1561,7 @@ void dumpMfu(demux_t *p_demux, block_t *mpu) {
 		pos = strlen(myFilePathName);
 		itoa(__MFU_COUNTER++, myFilePathName+pos, 10);
 
-		msg_Info(p_demux, "::dumpMfu ******* file dump __MPU_COUNTER is: %d, __MFU_COUNTER is: %d, file: %s", __MPU_COUNTER, __MFU_COUNTER-1, myFilePathName);
+//		msg_Info(p_demux, "::dumpMfu ******* file dump __MPU_COUNTER is: %d, __MFU_COUNTER is: %d, file: %s", __MPU_COUNTER, __MFU_COUNTER-1, myFilePathName);
 
 		FILE *f = fopen(myFilePathName, "w");
 		if(!f) {
@@ -2164,7 +1912,7 @@ static int LoadInitFrag( demux_t *p_demux )
     demux_sys_t *p_sys = p_demux->p_sys;
 
     /* Load all boxes ( except raw data ) */
-    MP4_Box_t *p_root = MP4_BoxGetRoot( p_demux->s );
+    MP4_Box_t *p_root = MP4_BoxGetRoot( p_sys->s_frag );
     if( p_root == NULL || !MP4_BoxGet( p_root, "/moov" ) )
     {
 		msg_Dbg( p_demux, "%d, calling free on p_root: %p", __LINE__, (void*)p_root);
@@ -2395,18 +2143,18 @@ static void MP4_Block_Send( demux_t *p_demux, mp4_track_t *p_track, block_t *p_b
     if( p_track->p_asf )
     {
         /* Fake a new stream from MP4 block */
-        stream_t *p_stream = p_demux->s;
-        p_demux->s = vlc_stream_MemoryNew( p_demux, p_block->p_buffer, p_block->i_buffer, true );
-        if ( p_demux->s )
+        stream_t *p_stream = p_sys->s_frag;
+        p_sys->s_frag = vlc_stream_MemoryNew( p_demux, p_block->p_buffer, p_block->i_buffer, true );
+        if ( p_sys->s_frag )
         {
             p_track->i_dts_backup = p_block->i_dts;
             p_track->i_pts_backup = p_block->i_pts;
             /* And demux it as ASF packet */
             DemuxASFPacket( &p_sys->asfpacketsys, p_block->i_buffer, p_block->i_buffer );
-            vlc_stream_Delete(p_demux->s);
+            vlc_stream_Delete(p_sys->s_frag);
         }
         block_Release(p_block);
-        p_demux->s = p_stream;
+        p_sys->s_frag = p_stream;
     }
     else
         es_out_Send( p_demux->out, p_track->p_es, p_block );
@@ -2432,7 +2180,7 @@ static int __mp4_Open( vlc_object_t * p_this )
     bool      b_enabled_es;
 
     /* A little test to see if it could be a mp4 */
-    if( vlc_stream_Peek( p_demux->s, &p_peek, 12 ) < 12 ) return VLC_EGENERIC;
+    if( vlc_stream_Peek( p_sys->s_frag, &p_peek, 12 ) < 12 ) return VLC_EGENERIC;
 
     switch( VLC_FOURCC( p_peek[4], p_peek[5], p_peek[6], p_peek[7] ) )
     {
@@ -2477,9 +2225,9 @@ static int __mp4_Open( vlc_object_t * p_this )
         return VLC_EGENERIC;
 
     /* I need to seek */
-    vlc_stream_Control( p_demux->s, STREAM_CAN_SEEK, &p_sys->b_seekable );
+    vlc_stream_Control( p_sys->s_frag, STREAM_CAN_SEEK, &p_sys->b_seekable );
     if( p_sys->b_seekable )
-        vlc_stream_Control( p_demux->s, STREAM_CAN_FASTSEEK, &p_sys->b_fastseekable );
+        vlc_stream_Control( p_sys->s_frag, STREAM_CAN_FASTSEEK, &p_sys->b_fastseekable );
 
     /*Set exported functions */
     p_demux->pf_demux = Demux;
@@ -2492,7 +2240,7 @@ static int __mp4_Open( vlc_object_t * p_this )
     if( LoadInitFrag( p_demux ) != VLC_SUCCESS )
         goto error;
 
-    MP4_BoxDumpStructure( p_demux->s, p_sys->p_root );
+    MP4_BoxDumpStructure( p_sys->s_frag, p_sys->p_root );
 
     if( ( p_ftyp = MP4_BoxGet( p_sys->p_root, "/ftyp" ) ) )
     {
@@ -2776,7 +2524,7 @@ static int __mp4_Open( vlc_object_t * p_this )
                 ProbeFragments( p_demux, (p_sys->i_duration == 0), &p_sys->b_fragmented );
             }
 
-            if( vlc_stream_Seek( p_demux->s, p_sys->p_moov->i_pos ) != VLC_SUCCESS )
+            if( vlc_stream_Seek( p_sys->s_frag, p_sys->p_moov->i_pos ) != VLC_SUCCESS )
                 goto error;
         }
         else /* Handle as fragmented by default as we can't see moof */
@@ -2825,9 +2573,9 @@ static int __mp4_Open( vlc_object_t * p_this )
     return VLC_SUCCESS;
 
 error:
-    if( vlc_stream_Tell( p_demux->s ) > 0 )
+    if( vlc_stream_Tell( p_sys->s_frag ) > 0 )
     {
-        if( vlc_stream_Seek( p_demux->s, 0 ) != VLC_SUCCESS )
+        if( vlc_stream_Seek( p_sys->s_frag, 0 ) != VLC_SUCCESS )
             msg_Warn( p_demux, "Can't reset stream position from probing" );
     }
 
@@ -3008,9 +2756,9 @@ static int DemuxTrack( demux_t *p_demux, mp4_track_t *tk, uint64_t i_readpos,
             block_t *p_block;
             vlc_tick_t i_delta;
 
-            if( vlc_stream_Tell( p_demux->s ) != i_readpos )
+            if( vlc_stream_Tell( p_sys->s_frag ) != i_readpos )
             {
-                if( MP4_Seek( p_demux->s, i_readpos ) != VLC_SUCCESS )
+                if( MP4_Seek( p_sys->s_frag, i_readpos ) != VLC_SUCCESS )
                 {
                     msg_Warn( p_demux, "track[0x%x] will be disabled (eof?)"
                                        ": Failed to seek to %"PRIu64,
@@ -3021,7 +2769,7 @@ static int DemuxTrack( demux_t *p_demux, mp4_track_t *tk, uint64_t i_readpos,
             }
 
             /* now read pes */
-            if( !(p_block = vlc_stream_Block( p_demux->s, i_samplessize )) )
+            if( !(p_block = vlc_stream_Block( p_sys->s_frag, i_samplessize )) )
             {
                 msg_Warn( p_demux, "track[0x%x] will be disabled (eof?)"
                                    ": Failed to read %d bytes sample at %"PRIu64,
@@ -3076,6 +2824,8 @@ static int DemuxMoov( demux_t *p_demux )
 
     unsigned int i_track;
 
+    msg_Info(p_demux, "%d:DemuxMoov, track count: %d", __LINE__, p_sys->i_tracks);
+
     /* check for newly selected/unselected track */
     for( i_track = 0; i_track < p_sys->i_tracks; i_track++ )
     {
@@ -3093,11 +2843,15 @@ static int DemuxMoov( demux_t *p_demux )
 
         if( tk->b_selected && !b )
         {
+            msg_Info(p_demux, "%d:DemuxMoov, before MP4_TrackSelect with track_id: %d", __LINE__, i_track);
+
             MP4_TrackSelect( p_demux, tk, false );
         }
         else if( !tk->b_selected && b)
         {
-            MP4_TrackSeek( p_demux, tk, MP4_GetMoviePTS( p_sys ) );
+            msg_Info(p_demux, "%d:DemuxMoov, before MP4_TrackSeek with track_id: %d, no seeking", __LINE__, i_track);
+
+           // MP4_TrackSeek( p_demux, tk, MP4_GetMoviePTS( p_sys ) );
         }
     }
 
@@ -3115,8 +2869,11 @@ static int DemuxMoov( demux_t *p_demux )
             /* Test for EOF on each track (samples count, edit list) */
             b_eof &= ( i_nztime > MP4_TrackGetDTS( p_demux, tk ) );
         }
-        if( b_eof )
+        if( b_eof ) {
+            msg_Info(p_demux, "%d:DemuxMoov, got b_eof track_id: %d", __LINE__, i_track);
+
             return VLC_DEMUXER_EOS;
+        }
     }
 
     const vlc_tick_t i_max_preload = ( p_sys->b_fastseekable ) ? 0 : ( p_sys->b_seekable ) ? DEMUX_TRACK_MAX_PRELOAD : INVALID_PRELOAD;
@@ -3171,6 +2928,8 @@ static int DemuxMoov( demux_t *p_demux )
             }
 
             uint64_t i_pos = MP4_TrackGetPos( tk );
+            msg_Info(p_demux, "%d:DemuxMoov, before DemuxTrack: i_pos: %d", __LINE__, i_pos);
+
             int i_ret = DemuxTrack( p_demux, tk, i_pos, i_max_preload );
 
             if( i_ret == VLC_DEMUXER_SUCCESS )
@@ -3206,6 +2965,7 @@ static int __mp4_Demux( demux_t *p_demux )
     msg_Info(p_demux, "__mp4_Demux:before DemuxMoov");
 
     int i_status = DemuxMoov( p_demux );
+    msg_Info(p_demux, "__mp4_Demux:after DemuxMoov, i_status is: %d", i_status);
 
     if( i_status == VLC_DEMUXER_EOS )
         i_status = VLC_DEMUXER_EOF;
@@ -3346,13 +3106,13 @@ static int FragSeekLoadFragment( demux_t *p_demux, uint32_t i_moox, stime_t i_mo
     else
     {
         const uint8_t *p_peek;
-        if( vlc_stream_Peek( p_demux->s, &p_peek, 8 ) != 8 )
+        if( vlc_stream_Peek( p_sys->s_frag, &p_peek, 8 ) != 8 )
             return VLC_EGENERIC;
 
         if( ATOM_moof != VLC_FOURCC( p_peek[4], p_peek[5], p_peek[6], p_peek[7] ) )
             return VLC_EGENERIC;
 
-        MP4_Box_t *p_vroot = MP4_BoxGetNextChunk( p_demux->s );
+        MP4_Box_t *p_vroot = MP4_BoxGetNextChunk( p_sys->s_frag );
         if(!p_vroot)
             return VLC_EGENERIC;
         p_moox = MP4_BoxExtract( &p_vroot->p_first, ATOM_moof );
@@ -3458,7 +3218,7 @@ static int FragSeekToTime( demux_t *p_demux, vlc_tick_t i_nztime, bool b_accurat
     if ( !p_sys->i_timescale || !i_duration || !p_sys->b_seekable )
          return VLC_EGENERIC;
 
-    uint64_t i_backup_pos = vlc_stream_Tell( p_demux->s );
+    uint64_t i_backup_pos = vlc_stream_Tell( p_sys->s_frag );
 
     if ( !p_sys->b_fragments_probed && !p_sys->b_index_probed && p_sys->b_seekable )
     {
@@ -3512,7 +3272,7 @@ static int FragSeekToTime( demux_t *p_demux, vlc_tick_t i_nztime, bool b_accurat
         if( !p_sys->b_fragments_probed && ( p_sys->b_fastseekable || b_buildindex ) )
         {
             bool foo;
-            int i_ret = vlc_stream_Seek( p_demux->s, p_sys->p_moov->i_pos + p_sys->p_moov->i_size );
+            int i_ret = vlc_stream_Seek( p_sys->s_frag, p_sys->p_moov->i_pos + p_sys->p_moov->i_size );
             if( i_ret == VLC_SUCCESS )
             {
                 i_ret = ProbeFragments( p_demux, true, &foo );
@@ -3520,7 +3280,7 @@ static int FragSeekToTime( demux_t *p_demux, vlc_tick_t i_nztime, bool b_accurat
             }
             if( i_ret != VLC_SUCCESS )
             {
-                p_sys->b_error = (vlc_stream_Seek( p_demux->s, i_backup_pos ) != VLC_SUCCESS);
+                p_sys->b_error = (vlc_stream_Seek( p_sys->s_frag, i_backup_pos ) != VLC_SUCCESS);
                 return i_ret;
             }
         }
@@ -3530,7 +3290,7 @@ static int FragSeekToTime( demux_t *p_demux, vlc_tick_t i_nztime, bool b_accurat
             stime_t i_basetime = MP4_rescale_qtime( i_sync_time, p_sys->i_timescale );
             if( !MP4_Fragments_Index_Lookup( p_sys->p_fragsindex, &i_basetime, &i64, i_seek_track_index ) )
             {
-                p_sys->b_error = (vlc_stream_Seek( p_demux->s, i_backup_pos ) != VLC_SUCCESS);
+                p_sys->b_error = (vlc_stream_Seek( p_sys->s_frag, i_backup_pos ) != VLC_SUCCESS);
                 return VLC_EGENERIC;
             }
             msg_Dbg( p_demux, "seeking to fragment index pos %" PRId64 " %" PRId64, i64,
@@ -3541,22 +3301,22 @@ static int FragSeekToTime( demux_t *p_demux, vlc_tick_t i_nztime, bool b_accurat
     if( i64 == UINT64_MAX )
     {
         msg_Warn( p_demux, "seek by index failed" );
-        p_sys->b_error = (vlc_stream_Seek( p_demux->s, i_backup_pos ) != VLC_SUCCESS);
+        p_sys->b_error = (vlc_stream_Seek( p_sys->s_frag, i_backup_pos ) != VLC_SUCCESS);
         return VLC_EGENERIC;
     }
 
     msg_Dbg( p_demux, "final seek to fragment at %"PRId64, i64 );
-    if( vlc_stream_Seek( p_demux->s, i64 ) )
+    if( vlc_stream_Seek( p_sys->s_frag, i64 ) )
     {
         msg_Err( p_demux, "seek failed to %"PRId64, i64 );
-        p_sys->b_error = (vlc_stream_Seek( p_demux->s, i_backup_pos ) != VLC_SUCCESS);
+        p_sys->b_error = (vlc_stream_Seek( p_sys->s_frag, i_backup_pos ) != VLC_SUCCESS);
         return VLC_EGENERIC;
     }
 
     /* Context is killed on success */
     if( FragSeekLoadFragment( p_demux, i_segment_type, i_segment_time ) != VLC_SUCCESS )
     {
-        p_sys->b_error = (vlc_stream_Seek( p_demux->s, i_backup_pos ) != VLC_SUCCESS);
+        p_sys->b_error = (vlc_stream_Seek( p_sys->s_frag, i_backup_pos ) != VLC_SUCCESS);
         return VLC_EGENERIC;
     }
 
@@ -3920,7 +3680,7 @@ static int __mp4_Control( demux_t *p_demux, int i_query, va_list args )
                     return VLC_SUCCESS;
                 }
             }
-            return demux_vaControlHelper( p_demux->s, 0, -1, 0, 1, i_query, args );
+            return demux_vaControlHelper( p_sys->s_frag, 0, -1, 0, 1, i_query, args );
         }
         case DEMUX_SET_NEXT_DEMUX_TIME:
         case DEMUX_SET_GROUP_DEFAULT:
@@ -3933,7 +3693,7 @@ static int __mp4_Control( demux_t *p_demux, int i_query, va_list args )
         case DEMUX_CAN_PAUSE:
         case DEMUX_SET_PAUSE_STATE:
         case DEMUX_CAN_CONTROL_PACE:
-            return demux_vaControlHelper( p_demux->s, 0, -1, 0, 1, i_query, args );
+            return demux_vaControlHelper( p_sys->s_frag, 0, -1, 0, 1, i_query, args );
 
         default:
             return VLC_EGENERIC;
@@ -4035,10 +3795,10 @@ static void LoadChapterApple( demux_t  *p_demux, mp4_track_t *tk )
         uint32_t i_nb_samples = 0;
         const uint32_t i_size = MP4_TrackGetReadSize( tk, &i_nb_samples );
 
-        if( i_size > 0 && !vlc_stream_Seek( p_demux->s, MP4_TrackGetPos( tk ) ) )
+        if( i_size > 0 && !vlc_stream_Seek( p_sys->s_frag, MP4_TrackGetPos( tk ) ) )
         {
             char p_buffer[256];
-            const uint32_t i_read = stream_ReadU32( p_demux->s, p_buffer,
+            const uint32_t i_read = stream_ReadU32( p_sys->s_frag, p_buffer,
                                                     __MIN( sizeof(p_buffer), i_size ) );
             if( i_read > 2 )
             {
@@ -4973,7 +4733,7 @@ static int TrackGotoChunkSample( demux_t *p_demux, mp4_track_t *p_track,
 
     return p_track->b_selected ? VLC_SUCCESS : VLC_EGENERIC;
 }
-#if 0
+
 static void MP4_TrackRestart( demux_t *p_demux, mp4_track_t *p_track,
                               MP4_Box_t *p_params_box )
 {
@@ -4998,11 +4758,11 @@ static void MP4_TrackRestart( demux_t *p_demux, mp4_track_t *p_track,
 
 
     /* do the cleanup and recycle track / restart */
-    MP4_TrackDestroy( p_demux, p_track );
-    memset( p_track, 0, sizeof(*p_track) );
+    //MP4_TrackDestroy( p_demux, p_track );
+    //memset( p_track, 0, sizeof(*p_track) );
 
     assert(p_params_box->i_type == ATOM_trak);
-    MP4_TrackCreate( p_demux, p_track, p_params_box, false, true );
+   //? MP4_TrackCreate( p_demux, p_track, p_params_box, false, true );
 
     if( p_track->b_ok )
     {
@@ -5039,7 +4799,7 @@ static void MP4_TrackRestart( demux_t *p_demux, mp4_track_t *p_track,
     p_track->i_sample = i_sample_pos_backup;
     p_track->i_time = MP4_rescale( time_backup, timescale_backup, p_track->i_timescale );
 }
-#endif
+
 /****************************************************************************
  * MP4_TrackSetup:
  ****************************************************************************
@@ -5261,6 +5021,7 @@ static void MP4_TrackSetup( demux_t *p_demux, mp4_track_t *p_track,
         msg_Warn( p_demux, "Enabling track[Id 0x%x] (buggy file without enabled track)",
                   p_track->i_track_ID );
         p_track->b_enable = true;
+        p_track->b_selected = true;
         p_track->fmt.i_priority = ES_PRIORITY_SELECTABLE_MIN;
     }
     else if ( (p_tsel = MP4_BoxGet( p_box_trak, "udta/tsel" )) )
@@ -5774,7 +5535,6 @@ static void MP4_TrackSetELST( demux_t *p_demux, mp4_track_t *tk,
 /******************************************************************************
  *     Here are the functions used for fragmented MP4
  *****************************************************************************/
-#if 0
 /**
  * Re-init decoder.
  * \Note If we call that function too soon,
@@ -5796,7 +5556,6 @@ static int ReInitDecoder( demux_t *p_demux, const MP4_Box_t *p_root,
 
     return VLC_SUCCESS;
 }
-#endif
 
 static stime_t GetCumulatedDuration( demux_t *p_demux )
 {
@@ -5838,28 +5597,28 @@ static int ProbeIndex( demux_t *p_demux )
     if ( MP4_BoxCount( p_sys->p_root, "/mfra" ) )
         return VLC_EGENERIC;
 
-    i_stream_size = stream_Size( p_demux->s );
+    i_stream_size = stream_Size( p_sys->s_frag );
     if ( ( i_stream_size >> 62 ) ||
          ( i_stream_size < MP4_MFRO_BOXSIZE ) ||
-         ( vlc_stream_Seek( p_demux->s, i_stream_size - MP4_MFRO_BOXSIZE ) != VLC_SUCCESS )
+         ( vlc_stream_Seek( p_sys->s_frag, i_stream_size - MP4_MFRO_BOXSIZE ) != VLC_SUCCESS )
        )
     {
         msg_Dbg( p_demux, "Probing tail for mfro has failed" );
         return VLC_EGENERIC;
     }
 
-    if ( vlc_stream_Read( p_demux->s, &mfro, MP4_MFRO_BOXSIZE ) == MP4_MFRO_BOXSIZE &&
+    if ( vlc_stream_Read( p_sys->s_frag, &mfro, MP4_MFRO_BOXSIZE ) == MP4_MFRO_BOXSIZE &&
          VLC_FOURCC(mfro[4],mfro[5],mfro[6],mfro[7]) == ATOM_mfro &&
          GetDWBE( &mfro ) == MP4_MFRO_BOXSIZE )
     {
         uint32_t i_offset = GetDWBE( &mfro[12] );
         msg_Dbg( p_demux, "will read mfra index at %"PRIu64, i_stream_size - i_offset );
         if ( i_stream_size > i_offset &&
-             vlc_stream_Seek( p_demux->s, i_stream_size - i_offset ) == VLC_SUCCESS )
+             vlc_stream_Seek( p_sys->s_frag, i_stream_size - i_offset ) == VLC_SUCCESS )
         {
             msg_Dbg( p_demux, "reading mfra index at %"PRIu64, i_stream_size - i_offset );
             const uint32_t stoplist[] = { ATOM_mfra, 0 };
-            MP4_ReadBoxContainerChildren( p_demux->s, p_sys->p_root, stoplist );
+            MP4_ReadBoxContainerChildren( p_sys->s_frag, p_sys->p_root, stoplist );
         }
         return VLC_SUCCESS;
     }
@@ -5972,7 +5731,7 @@ static int ProbeFragments( demux_t *p_demux, bool b_force, bool *pb_fragmented )
 {
     demux_sys_t *p_sys = p_demux->p_sys;
 
-    msg_Dbg( p_demux, "probing fragments from %"PRId64, vlc_stream_Tell( p_demux->s ) );
+    msg_Dbg( p_demux, "probing fragments from %"PRId64, vlc_stream_Tell( p_sys->s_frag ) );
 
     assert( p_sys->p_root );
 
@@ -5982,7 +5741,7 @@ static int ProbeFragments( demux_t *p_demux, bool b_force, bool *pb_fragmented )
 
     if( p_sys->b_seekable && (p_sys->b_fastseekable || b_force) )
     {
-        MP4_ReadBoxContainerChildren( p_demux->s, p_vroot, NULL ); /* Get the rest of the file */
+        MP4_ReadBoxContainerChildren( p_sys->s_frag, p_vroot, NULL ); /* Get the rest of the file */
         p_sys->b_fragments_probed = true;
 
         const unsigned i_moof = MP4_BoxCount( p_vroot, "/moof" );
@@ -6058,10 +5817,10 @@ static int ProbeFragments( demux_t *p_demux, bool b_force, bool *pb_fragmented )
         /* We stop at first moof, which validates our fragmentation condition
          * and we'll find others while reading. */
         const uint32_t excllist[] = { ATOM_moof, 0 };
-        MP4_ReadBoxContainerRestricted( p_demux->s, p_vroot, NULL, excllist );
+        MP4_ReadBoxContainerRestricted( p_sys->s_frag, p_vroot, NULL, excllist );
         /* Peek since we stopped before restriction */
         const uint8_t *p_peek;
-        if ( vlc_stream_Peek( p_demux->s, &p_peek, 8 ) == 8 )
+        if ( vlc_stream_Peek( p_sys->s_frag, &p_peek, 8 ) == 8 )
             *pb_fragmented = (VLC_FOURCC( p_peek[4], p_peek[5], p_peek[6], p_peek[7] ) == ATOM_moof);
         else
             *pb_fragmented = false;
@@ -6097,6 +5856,9 @@ static void FragResetContext( demux_sys_t *p_sys )
 static int FragDemuxTrack( demux_t *p_demux, mp4_track_t *p_track,
                            vlc_tick_t i_max_preload )
 {
+
+    demux_sys_t *p_sys = p_demux->p_sys;
+
     if( !p_track->b_ok ||
          p_track->context.runs.i_current >= p_track->context.runs.i_count )
         return VLC_DEMUXER_EOS;
@@ -6110,8 +5872,8 @@ static int FragDemuxTrack( demux_t *p_demux, mp4_track_t *p_track,
     uint32_t dur = p_track->context.i_default_sample_duration,
              len = p_track->context.i_default_sample_size;
 
-    if( vlc_stream_Tell(p_demux->s) != p_track->context.i_trun_sample_pos &&
-        MP4_Seek( p_demux->s, p_track->context.i_trun_sample_pos ) != VLC_SUCCESS )
+    if( vlc_stream_Tell(p_sys->s_frag) != p_track->context.i_trun_sample_pos &&
+        MP4_Seek( p_sys->s_frag, p_track->context.i_trun_sample_pos ) != VLC_SUCCESS )
         return VLC_DEMUXER_EOF;
 
     const stime_t i_demux_max_dts = (i_max_preload < INVALID_PRELOAD) ?
@@ -6126,8 +5888,11 @@ static int FragDemuxTrack( demux_t *p_demux, mp4_track_t *p_track,
         if( p_trun->i_flags & MP4_TRUN_SAMPLE_DURATION )
             dur = p_trun->p_samples[i].i_duration;
 
-        if( i_dts > i_demux_max_dts )
+        if( i_dts > i_demux_max_dts ) {
+            msg_Info(p_demux, "%d:FragDemuxTrack, i_dts:%llu > i_demux_max_pts:%llu", __LINE__, i_dts, i_demux_max_dts);
+
             return VLC_DEMUXER_SUCCESS;
+        }
 
         p_track->i_time += dur;
         p_track->context.i_trun_sample = i + 1;
@@ -6151,7 +5916,7 @@ static int FragDemuxTrack( demux_t *p_demux, mp4_track_t *p_track,
         if( !len )
             msg_Warn(p_demux, "Zero length sample in trun.");
 
-        block_t *p_block = vlc_stream_Block( p_demux->s, len );
+        block_t *p_block = vlc_stream_Block( p_sys->s_frag, len );
         uint32_t i_read = ( p_block ) ? p_block->i_buffer : 0;
         p_track->context.i_trun_sample_pos += i_read;
         if( i_read < len || p_block == NULL )
@@ -6209,6 +5974,8 @@ static int DemuxMoof( demux_t *p_demux )
     /* demux up to increment amount of data on every track, or just set pcr if empty data */
     for( ;; )
     {
+        msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
         mp4_track_t *tk = NULL;
         i_status = VLC_DEMUXER_EOS;
 
@@ -6224,6 +5991,7 @@ static int DemuxMoof( demux_t *p_demux )
 
             /* At least still have data to demux on this or next turns */
             i_status = VLC_DEMUXER_SUCCESS;
+            msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
 
             if( MP4_rescale_mtime( tk_tmp->i_time, tk_tmp->i_timescale ) <= i_nztime + DEMUX_INCREMENT )
             {
@@ -6231,6 +5999,8 @@ static int DemuxMoof( demux_t *p_demux )
                     tk = tk_tmp;
             }
         }
+
+        msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
 
         if( tk )
         {
@@ -6255,18 +6025,22 @@ static int DemuxMoof( demux_t *p_demux )
                     /* Note: previous candidate will be repicked on next loop */
                 }
             }
+            msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
 
             int i_ret = FragDemuxTrack( p_demux, tk, i_max_preload );
+            msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
 
             if( i_ret == VLC_DEMUXER_SUCCESS )
                 i_status = VLC_DEMUXER_SUCCESS;
             else if( i_ret == VLC_DEMUXER_FATAL )
                 i_status = VLC_DEMUXER_EOF;
         }
+        msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
 
         if( i_status != VLC_DEMUXER_SUCCESS || !tk )
             break;
     }
+    msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
 
     if( i_status != VLC_DEMUXER_EOS )
     {
@@ -6279,11 +6053,17 @@ static int DemuxMoof( demux_t *p_demux )
         vlc_tick_t i_segment_end = INT64_MAX;
         for( unsigned i = 0; i < p_sys->i_tracks; i++ )
         {
+            msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
             mp4_track_t *tk = &p_sys->track[i];
             if( tk->b_ok || tk->b_chapters_source ||
                (!tk->b_selected && !p_sys->b_seekable) )
                 continue;
+            msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
             vlc_tick_t i_track_end = MP4_rescale_mtime( tk->i_time, tk->i_timescale );
+            msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
             if( i_track_end < i_segment_end  )
                 i_segment_end = i_track_end;
         }
@@ -6645,6 +6425,8 @@ static int DemuxFrag( demux_t *p_demux )
         goto end;
     }
 
+    msg_Info(p_demux, "%d:DemuxFrag, track count is: %d", __LINE__, p_sys->i_tracks);
+
     /* check for newly selected/unselected track */
     for( unsigned i_track = 0; i_track < p_sys->i_tracks; i_track++ )
     {
@@ -6674,12 +6456,16 @@ static int DemuxFrag( demux_t *p_demux )
         goto end;
     }
 
+    msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
     if ( p_sys->context.i_current_box_type != ATOM_mdat )
     {
         /* Othewise mdat is skipped. FIXME: mdat reading ! */
         const uint8_t *p_peek;
-        if( vlc_stream_Peek( p_demux->s, &p_peek, 8 ) != 8 )
+        if( vlc_stream_Peek( p_sys->s_frag, &p_peek, 8 ) != 8 )
         {
+            msg_Info(p_demux, "%d:DemuxFrag, EOF??", __LINE__);
+
             i_status = VLC_DEMUXER_EOF;
             goto end;
         }
@@ -6688,12 +6474,14 @@ static int DemuxFrag( demux_t *p_demux )
         if( p_sys->context.i_current_box_type != ATOM_moof &&
             p_sys->context.i_current_box_type != ATOM_moov )
         {
-            uint64_t i_pos = vlc_stream_Tell( p_demux->s );
+            uint64_t i_pos = vlc_stream_Tell( p_sys->s_frag );
             uint64_t i_size = GetDWBE( p_peek );
             if ( i_size == 1 )
             {
-                if( vlc_stream_Peek( p_demux->s, &p_peek, 16 ) != 16 )
+                if( vlc_stream_Peek( p_sys->s_frag, &p_peek, 16 ) != 16 )
                 {
+                    msg_Info(p_demux, "%d:DemuxFrag, EOF??", __LINE__);
+
                     i_status = VLC_DEMUXER_EOF;
                     goto end;
                 }
@@ -6703,6 +6491,8 @@ static int DemuxFrag( demux_t *p_demux )
             if( UINT64_MAX - i_pos < i_size )
             {
                 i_status = VLC_DEMUXER_EOF;
+                msg_Info(p_demux, "%d:DemuxFrag, EOF??", __LINE__);
+
                 goto end;
             }
 
@@ -6712,15 +6502,17 @@ static int DemuxFrag( demux_t *p_demux )
                  * but we'll need post mdat offset, as we'll never seek backward */
                 p_sys->context.i_post_mdat_offset = i_pos + i_size;
             }
-            else if( MP4_Seek( p_demux->s, i_pos + i_size ) != VLC_SUCCESS ) /* skip other atoms */
+            else if( MP4_Seek( p_sys->s_frag, i_pos + i_size ) != VLC_SUCCESS ) /* skip other atoms */
             {
                 i_status = VLC_DEMUXER_EOF;
+                msg_Info(p_demux, "%d:DemuxFrag, EOF??", __LINE__);
+
                 goto end;
             }
         }
         else
         {
-            MP4_Box_t *p_vroot = MP4_BoxGetNextChunk( p_demux->s );
+            MP4_Box_t *p_vroot = MP4_BoxGetNextChunk( p_sys->s_frag );
             if(!p_vroot)
             {
                 i_status = VLC_DEMUXER_EOF;
@@ -6760,6 +6552,8 @@ static int DemuxFrag( demux_t *p_demux )
                                           MP4_BoxGet( p_vroot, "sidx"), INVALID_SEGMENT_TIME,
                                           b_discontinuity ) != VLC_SUCCESS )
                     {
+                        msg_Info(p_demux, "%d:DemuxFrag, FragPrepareChunk failed", __LINE__);
+
                         MP4_BoxFree( p_vroot );
                         i_status = VLC_DEMUXER_EOF;
                         goto end;
@@ -6786,6 +6580,8 @@ static int DemuxFrag( demux_t *p_demux )
         }
     }
 
+    msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
     if ( p_sys->context.i_current_box_type == ATOM_mdat )
     {
         assert(p_sys->context.p_fragment_atom);
@@ -6794,10 +6590,18 @@ static int DemuxFrag( demux_t *p_demux )
         switch( p_sys->context.p_fragment_atom->i_type )
         {
             case ATOM_moov://[ftyp/moov, mdat]+ -> [moof, mdat]+
+                msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
                 i_status = DemuxMoov( p_demux );
+                msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
             break;
             case ATOM_moof:
+                msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
                 i_status = DemuxMoof( p_demux );
+                msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
               break;
         default:
              msg_Err( p_demux, "fragment type %4.4s", (char*) &p_sys->context.p_fragment_atom->i_type );
@@ -6808,21 +6612,30 @@ static int DemuxFrag( demux_t *p_demux )
         {
             i_status = VLC_DEMUXER_SUCCESS;
             /* Skip if we didn't reach the end of mdat box */
-            uint64_t i_pos = vlc_stream_Tell( p_demux->s );
+            msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
+            uint64_t i_pos = vlc_stream_Tell( p_sys->s_frag );
+            msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
             if( i_pos != p_sys->context.i_post_mdat_offset && i_status != VLC_DEMUXER_EOF )
             {
+                msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
                 if( i_pos > p_sys->context.i_post_mdat_offset )
                     msg_Err( p_demux, " Overread mdat by %" PRIu64, i_pos - p_sys->context.i_post_mdat_offset );
                 else
                     msg_Warn( p_demux, "mdat had still %"PRIu64" bytes unparsed as samples",
                                         p_sys->context.i_post_mdat_offset - i_pos );
-                if( MP4_Seek( p_demux->s, p_sys->context.i_post_mdat_offset ) != VLC_SUCCESS )
+                msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+
+                if( MP4_Seek( p_sys->s_frag, p_sys->context.i_post_mdat_offset ) != VLC_SUCCESS )
                     i_status = VLC_DEMUXER_EGENERIC;
             }
             p_sys->context.i_current_box_type = 0;
 
         }
     }
+    msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
 
 end:
     if( i_status == VLC_DEMUXER_EOF )
@@ -6838,6 +6651,8 @@ end:
         if( i_demux_end != INT64_MIN )
             es_out_SetPCR( p_demux->out, VLC_TICK_0 + i_demux_end );
     }
+
+    msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
 
     return i_status;
 }
