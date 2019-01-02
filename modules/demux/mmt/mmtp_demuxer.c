@@ -1163,7 +1163,7 @@ static int Demux( demux_t *p_demux )
 			return VLC_DEMUXER_SUCCESS;
 	    }
 
-	    uint16_t  mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
+	    uint16_t mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
 	    uint32_t mmtp_timestamp 		= mmtp_packet_preamble[4]  << 24 | mmtp_packet_preamble[5]  << 16 | mmtp_packet_preamble[6]   << 8 | mmtp_packet_preamble[7];
 	    uint32_t packet_sequence_number = mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
 	    uint32_t packet_counter 		= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
@@ -1306,13 +1306,13 @@ static int Demux( demux_t *p_demux )
 					} }
 					*/
 
-					//uint8_t mmthsample_len;  even tho its written as aligned(8), doesn't appear to match up?
+					uint8_t mmthsample_len;
 					uint8_t mmthsample_sequence_number[4];
 
 					if(mpu_timed_flag) {
 						//112 bits in aggregate, 14 bytes
 						uint8_t timed_mfu_block[14];
-						buf = extract(buf, &timed_mfu_block, 14);
+						buf = extract(buf, timed_mfu_block, 14);
 
 						movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
 						sample_number				   = (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
@@ -1323,11 +1323,11 @@ static int Demux( demux_t *p_demux )
 						//parse out mmthsample block if this is our first fragment
 						if(mpu_fragmentation_indicator == 1) {
 
-							//buf = extract(buf, &mmthsample_len, 1);
-							buf = extract(buf, &mmthsample_sequence_number, 4);
+							buf = extract(buf, &mmthsample_len, 1);
+							buf = extract(buf, mmthsample_sequence_number, 4);
 
 							uint8_t mmthsample_timed_block[19];
-							buf = extract(buf, &mmthsample_timed_block, 19);
+							buf = extract(buf, mmthsample_timed_block, 19);
 
 							//read multilayerinfo
 							uint8_t multilayerinfo_length;
@@ -1335,7 +1335,7 @@ static int Demux( demux_t *p_demux )
 							uint8_t multilayer_flag;
 
 							buf = extract(buf, &multilayerinfo_length, 1);
-							buf = extract(buf, &multilayerinfo_box_name, 4);
+							buf = extract(buf, multilayerinfo_box_name, 4);
 
 							buf = extract(buf, &multilayer_flag, 1);
 
@@ -1343,37 +1343,37 @@ static int Demux( demux_t *p_demux )
 							//if MSB is 1, then read multilevel struct, otherwise just pull layer info...
 							if(is_multilayer) {
 								uint8_t multilayer_data_block[4];
-								buf = extract(buf, &multilayer_data_block, 4);
+								buf = extract(buf, multilayer_data_block, 4);
 
 							} else {
 								uint8_t multilayer_layer_id_temporal_id[2];
-								buf = extract(buf, &multilayer_layer_id_temporal_id, 2);
+								buf = extract(buf, multilayer_layer_id_temporal_id, 2);
 							}
+
+							msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: 1, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
+														movie_fragment_sequence_number, sample_number, offset, priority, dep_counter, is_multilayer);
+						} else {
+							msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
+									mpu_fragmentation_indicator, movie_fragment_sequence_number, sample_number, offset, priority, dep_counter);
 						}
 
 						//end mfu box read
 
-						msg_Info(p_demux, "mpu mode -timed MFU, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
-								movie_fragment_sequence_number, sample_number, offset, priority, dep_counter, is_multilayer);
-
-
 						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
 					} else {
-
+						uint8_t non_timed_mfu_block[4];
+						uint32_t non_timed_mfu_item_id;
+						//only 32 bits
+						buf = extract(buf, non_timed_mfu_block, 4);
 						non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
 
 						if(mpu_fragmentation_indicator == 1) {
-							//only 32 bits
-							uint8_t non_timed_mfu_block[4];
-							uint32_t non_timed_mfu_item_id;
-							buf = extract(buf, &non_timed_mfu_block, 4);
-
 							//read mmthsample
 							buf = extract(buf, &mmthsample_len, 1);
-							buf = extract(buf, &mmthsample_sequence_number, 4);
+							buf = extract(buf, mmthsample_sequence_number, 4);
 
 							uint8_t mmthsample_item_id[2];
-							buf = extract(buf, &mmthsample_sequence_number, 2);
+							buf = extract(buf, mmthsample_sequence_number, 2);
 							//end reading of mmthsample box
 						}
 
