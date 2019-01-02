@@ -5505,9 +5505,9 @@ static int FragDemuxTrack( demux_t *p_demux, mp4_track_t *p_track,
 
     if( vlc_stream_Tell(p_sys->s_frag) != p_track->context.i_trun_sample_pos &&
         MP4_Seek( p_sys->s_frag, p_track->context.i_trun_sample_pos ) != VLC_SUCCESS ) {
-        msg_Info(p_demux, "%d:FragDemuxTrack, p_sys->s_frag should be eof, pos: %llu", __LINE__, vlc_stream_tell(p_sys->s_frag));
+        msg_Info(p_demux, "%d:FragDemuxTrack, p_sys->s_frag should be eof: %d, pos: %llu", __LINE__, vlc_stream_Eof(p_sys->s_frag), vlc_stream_Tell(p_sys->s_frag));
 
-        return VLC_DEMUXER_EOF;
+        return VLC_DEMUXER_FATAL; //VLC_DEMUXER_EOF;
     }
 
     const stime_t i_demux_max_dts = (i_max_preload < INVALID_PRELOAD) ?
