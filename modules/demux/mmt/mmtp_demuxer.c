@@ -884,11 +884,12 @@ static int __processFirstMpuFragment(demux_t *p_demux) {
 		}
 	}
 
-	if( p_sys->b_fragmented )
-	{
-		p_demux->pf_demux = DemuxFrag;
-		msg_Dbg( p_demux, "Set Fragmented demux mode" );
-	}
+// don't stea our demux callback
+//	if( p_sys->b_fragmented )
+//	{
+//		p_demux->pf_demux = DemuxFrag;
+//		msg_Dbg( p_demux, "Set Fragmented demux mode" );
+//	}
 //
 //	if( !p_sys->b_seekable && p_demux->pf_demux == Demux )
 //	{
@@ -1028,361 +1029,365 @@ static int Demux( demux_t *p_demux )
 		msg_Err( p_demux, "mmtp_demuxer - size from UDP was under/over heureis/max, dropping %d bytes", mmtp_raw_packet_size);
 		free(raw_buf); //only free raw_buf
 		return VLC_DEMUXER_SUCCESS;
-	} else {
+	}
 
-		block_ChainExtract(read_block, raw_buf, MAX_MMTP_SIZE);
 
-		uint8_t mmtp_packet_preamble[20];
 
-		//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
-		buf = extract(buf, mmtp_packet_preamble, 20);
-		//msg_Warn( p_demux, "buf pos is now %p vs %p", new_buf_pos, (void *)buf);
+	block_ChainExtract(read_block, raw_buf, MAX_MMTP_SIZE);
+
+	uint8_t mmtp_packet_preamble[20];
+
+	//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
+	buf = extract(buf, mmtp_packet_preamble, 20);
+	//msg_Warn( p_demux, "buf pos is now %p vs %p", new_buf_pos, (void *)buf);
 
 //		msg_Dbg( p_demux, "raw packet size is: %d, first byte: 0x%X", mmtp_raw_packet_size, mmtp_packet_preamble[0]);
 
-		if(false) {
-			char buffer[(mmtp_raw_packet_size * 3)+1];
+	if(false) {
+		char buffer[(mmtp_raw_packet_size * 3)+1];
 
-			for(int i=0; i < mmtp_raw_packet_size; i++) {
-				if(i>1 && (i+1)%8 == 0) {
-					snprintf(buffer + (i*3), 4, "%02X\n", raw_buf[i]);
-				} else {
-					snprintf(buffer + (i*3), 4, "%02X ", raw_buf[i]);
-				}
+		for(int i=0; i < mmtp_raw_packet_size; i++) {
+			if(i>1 && (i+1)%8 == 0) {
+				snprintf(buffer + (i*3), 4, "%02X\n", raw_buf[i]);
+			} else {
+				snprintf(buffer + (i*3), 4, "%02X ", raw_buf[i]);
 			}
-			msg_Info(p_demux, "raw packet payload is:\n%s", buffer);
 		}
+		msg_Info(p_demux, "raw packet payload is:\n%s", buffer);
+	}
 
-	    uint8_t mmtp_packet_version = (mmtp_packet_preamble[0] & 0xC0) >> 6;
-	    uint8_t packet_counter_flag = (mmtp_packet_preamble[0] & 0x20) >> 5;
-	    uint8_t fec_type = (mmtp_packet_preamble[0] & 0x18) >> 3;
+	uint8_t mmtp_packet_version = (mmtp_packet_preamble[0] & 0xC0) >> 6;
+	uint8_t packet_counter_flag = (mmtp_packet_preamble[0] & 0x20) >> 5;
+	uint8_t fec_type = (mmtp_packet_preamble[0] & 0x18) >> 3;
 
-	    //v=0 vs v=1 attributes in the first 2 octets
-	    uint8_t  mmtp_payload_type = 0;
-		uint8_t  mmtp_header_extension_flag = 0;
-		uint8_t  mmtp_rap_flag = 0;
-		uint8_t  mmtp_qos_flag = 0;
+	//v=0 vs v=1 attributes in the first 2 octets
+	uint8_t  mmtp_payload_type = 0;
+	uint8_t  mmtp_header_extension_flag = 0;
+	uint8_t  mmtp_rap_flag = 0;
+	uint8_t  mmtp_qos_flag = 0;
 
-		uint8_t  mmtp_flow_identifer_flag = 0;
-		uint8_t  mmtp_flow_extension_flag = 0;
+	uint8_t  mmtp_flow_identifer_flag = 0;
+	uint8_t  mmtp_flow_extension_flag = 0;
 
-		uint8_t  mmtp_header_compression = 0;
-		uint8_t	 mmtp_indicator_ref_header_flag = 0;
+	uint8_t  mmtp_header_compression = 0;
+	uint8_t	 mmtp_indicator_ref_header_flag = 0;
 
-		uint8_t mmtp_type_of_bitrate = 0;
-		uint8_t mmtp_delay_sensitivity = 0;
-		uint8_t mmtp_transmission_priority = 0;
+	uint8_t mmtp_type_of_bitrate = 0;
+	uint8_t mmtp_delay_sensitivity = 0;
+	uint8_t mmtp_transmission_priority = 0;
 
-	    uint16_t mmtp_header_extension_type = 0;
-	    uint16_t mmtp_header_extension_length = 0;
+	uint16_t mmtp_header_extension_type = 0;
+	uint16_t mmtp_header_extension_length = 0;
 
-	    uint8_t flow_label = 0;
+	uint8_t flow_label = 0;
 
-	    if(mmtp_packet_version == 0x00) {
-	    	//after fec_type, with v=0, next bitmask is 0x4 >>2
-	    	//0000 0010
-	    	//V0CF E-XR
-	    	mmtp_header_extension_flag = (mmtp_packet_preamble[0] & 0x2) >> 1;
-	    	mmtp_rap_flag = mmtp_packet_preamble[0] & 0x1;
+	if(mmtp_packet_version == 0x00) {
+		//after fec_type, with v=0, next bitmask is 0x4 >>2
+		//0000 0010
+		//V0CF E-XR
+		mmtp_header_extension_flag = (mmtp_packet_preamble[0] & 0x2) >> 1;
+		mmtp_rap_flag = mmtp_packet_preamble[0] & 0x1;
 
-	    	//6 bits right aligned
-	    	mmtp_payload_type = mmtp_packet_preamble[1] & 0x3f;
-	    	if(mmtp_header_extension_flag & 0x1) {
-	    		mmtp_header_extension_type = (mmtp_packet_preamble[16]) << 8 | mmtp_packet_preamble[17];
-	    		mmtp_header_extension_length = (mmtp_packet_preamble[18]) << 8 | mmtp_packet_preamble[19];
-	    	} else {
-	    		//walk back by 4 bytes
-	    		buf-=4;
-	    	}
-	    } else if(mmtp_packet_version == 0x01) {
-	    	//bitmask is 0000 00
-	    	//0000 0100
-	    	//V1CF EXRQ
-	    	mmtp_header_extension_flag = mmtp_packet_preamble[0] & 0x4 >> 2; //X
-	    	mmtp_rap_flag = (mmtp_packet_preamble[0] & 0x2) >> 1;				//RAP
-	    	mmtp_qos_flag = mmtp_packet_preamble[0] & 0x1;					//QOS
-	    	//0000 0000
-	    	//FEBI TYPE
-	    	//4 bits for preamble right aligned
-
-	    	mmtp_flow_identifer_flag = ((mmtp_packet_preamble[1]) & 0x80) >> 7;			//F
-	    	mmtp_flow_extension_flag = ((mmtp_packet_preamble[1]) & 0x40) >> 6;			//E
-	    	mmtp_header_compression = ((mmtp_packet_preamble[1]) &  0x20) >> 5; 		//B
-	    	mmtp_indicator_ref_header_flag = ((mmtp_packet_preamble[1]) & 0x10) >> 4;	//I
-
-	    	mmtp_payload_type = mmtp_packet_preamble[1] & 0xF;
-
-	    	//TB 2 bits
-			mmtp_type_of_bitrate = ((mmtp_packet_preamble[16] & 0x40) >> 6) | ((mmtp_packet_preamble[16] & 0x20) >> 5);
-
-	    	//DS 3 bits
-			mmtp_delay_sensitivity = ((mmtp_packet_preamble[16] & 0x10) >> 4) | ((mmtp_packet_preamble[16] & 0x8) >> 3) | ((mmtp_packet_preamble[16] & 0x4) >> 2);
-
-	    	//TP 3 bits
-			mmtp_transmission_priority =(( mmtp_packet_preamble[16] & 0x02) << 2) | ((mmtp_packet_preamble[16] & 0x1) << 1) | ((mmtp_packet_preamble[17] & 0x80) >>7);
-
-	    	flow_label = mmtp_packet_preamble[17] & 0x7f;
-
-	    	//header extension is offset by 2 bytes in v=1, so an additional block chain read is needed to get extension length
-	       	if(mmtp_header_extension_flag & 0x1) {
-	     		mmtp_header_extension_type = (mmtp_packet_preamble[18] << 8) | mmtp_packet_preamble[19];
-
-				msg_Warn( p_demux, "mmtp_demuxer - dping mmtp_header_extension_length_bytes: %d",  mmtp_header_extension_type);
-
-	     		uint8_t mmtp_header_extension_length_bytes[2];
-	     		buf = extract(buf, mmtp_header_extension_length_bytes, 2);
-
-	     		mmtp_header_extension_length = mmtp_header_extension_length_bytes[0] << 8 | mmtp_header_extension_length_bytes[1];
-	    	} else {
-	    		//walk back our buf position by 2 bytes to start for payload ddata
-	    		buf-=2;
-
-	    	}
-	    } else {
-			msg_Warn( p_demux, "mmtp_demuxer - unknown packet version of 0x%X", mmtp_packet_version);
-			free( raw_buf );
-
-			return VLC_DEMUXER_SUCCESS;
-	    }
-
-	    uint16_t mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
-	    uint32_t mmtp_timestamp 		= mmtp_packet_preamble[4]  << 24 | mmtp_packet_preamble[5]  << 16 | mmtp_packet_preamble[6]   << 8 | mmtp_packet_preamble[7];
-	    uint32_t packet_sequence_number = mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
-	    uint32_t packet_counter 		= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
-
-		msg_Dbg( p_demux, "packet version: %d, payload_type: 0x%X, packet_id 0x%hu, timestamp: 0x%X, packet_sequence_number: 0x%X, packet_counter: 0x%X", mmtp_packet_version,
-				mmtp_payload_type, mmtp_packet_id, mmtp_timestamp, packet_sequence_number, packet_counter);
-
-		//if our header extension length is set, then block extract the header extension length, adn we should be at our payload data
-		uint8_t *mmtp_header_extension_value = NULL;
-
+		//6 bits right aligned
+		mmtp_payload_type = mmtp_packet_preamble[1] & 0x3f;
 		if(mmtp_header_extension_flag & 0x1) {
-			//clamp mmtp_header_extension_length
-			mmtp_header_extension_length = MIN(mmtp_header_extension_length, 2^16);
-			msg_Warn( p_demux, "mmtp_demuxer - doing  mmtp_header_extension_flag with size: %d", mmtp_header_extension_length);
+			mmtp_header_extension_type = (mmtp_packet_preamble[16]) << 8 | mmtp_packet_preamble[17];
+			mmtp_header_extension_length = (mmtp_packet_preamble[18]) << 8 | mmtp_packet_preamble[19];
+		} else {
+			//walk back by 4 bytes
+			buf-=4;
+		}
+	} else if(mmtp_packet_version == 0x01) {
+		//bitmask is 0000 00
+		//0000 0100
+		//V1CF EXRQ
+		mmtp_header_extension_flag = mmtp_packet_preamble[0] & 0x4 >> 2; //X
+		mmtp_rap_flag = (mmtp_packet_preamble[0] & 0x2) >> 1;				//RAP
+		mmtp_qos_flag = mmtp_packet_preamble[0] & 0x1;					//QOS
+		//0000 0000
+		//FEBI TYPE
+		//4 bits for preamble right aligned
 
-			mmtp_header_extension_value = malloc(mmtp_header_extension_length);
-			//read the header extension value up to the extension length field 2^16
-			buf = extract(buf, &mmtp_header_extension_value, mmtp_header_extension_length);
-    	}
+		mmtp_flow_identifer_flag = ((mmtp_packet_preamble[1]) & 0x80) >> 7;			//F
+		mmtp_flow_extension_flag = ((mmtp_packet_preamble[1]) & 0x40) >> 6;			//E
+		mmtp_header_compression = ((mmtp_packet_preamble[1]) &  0x20) >> 5; 		//B
+		mmtp_indicator_ref_header_flag = ((mmtp_packet_preamble[1]) & 0x10) >> 4;	//I
 
-	    if(mmtp_payload_type == 0) {
-	    	//pull the mpu and frag iformation
+		mmtp_payload_type = mmtp_packet_preamble[1] & 0xF;
 
-	    	uint8_t mpu_payload_length_block[2];
-	    	uint16_t mpu_payload_length = 0;
+		//TB 2 bits
+		mmtp_type_of_bitrate = ((mmtp_packet_preamble[16] & 0x40) >> 6) | ((mmtp_packet_preamble[16] & 0x20) >> 5);
+
+		//DS 3 bits
+		mmtp_delay_sensitivity = ((mmtp_packet_preamble[16] & 0x10) >> 4) | ((mmtp_packet_preamble[16] & 0x8) >> 3) | ((mmtp_packet_preamble[16] & 0x4) >> 2);
+
+		//TP 3 bits
+		mmtp_transmission_priority =(( mmtp_packet_preamble[16] & 0x02) << 2) | ((mmtp_packet_preamble[16] & 0x1) << 1) | ((mmtp_packet_preamble[17] & 0x80) >>7);
+
+		flow_label = mmtp_packet_preamble[17] & 0x7f;
+
+		//header extension is offset by 2 bytes in v=1, so an additional block chain read is needed to get extension length
+		if(mmtp_header_extension_flag & 0x1) {
+			mmtp_header_extension_type = (mmtp_packet_preamble[18] << 8) | mmtp_packet_preamble[19];
+
+			msg_Warn( p_demux, "mmtp_demuxer - dping mmtp_header_extension_length_bytes: %d",  mmtp_header_extension_type);
+
+			uint8_t mmtp_header_extension_length_bytes[2];
+			buf = extract(buf, mmtp_header_extension_length_bytes, 2);
+
+			mmtp_header_extension_length = mmtp_header_extension_length_bytes[0] << 8 | mmtp_header_extension_length_bytes[1];
+		} else {
+			//walk back our buf position by 2 bytes to start for payload ddata
+			buf-=2;
+
+		}
+	} else {
+		msg_Warn( p_demux, "mmtp_demuxer - unknown packet version of 0x%X", mmtp_packet_version);
+		free( raw_buf );
+
+		return VLC_DEMUXER_SUCCESS;
+	}
+
+	uint16_t mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
+	uint32_t mmtp_timestamp 		= mmtp_packet_preamble[4]  << 24 | mmtp_packet_preamble[5]  << 16 | mmtp_packet_preamble[6]   << 8 | mmtp_packet_preamble[7];
+	uint32_t packet_sequence_number = mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
+	uint32_t packet_counter 		= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
+
+	msg_Dbg( p_demux, "packet version: %d, payload_type: 0x%X, packet_id 0x%hu, timestamp: 0x%X, packet_sequence_number: 0x%X, packet_counter: 0x%X", mmtp_packet_version,
+			mmtp_payload_type, mmtp_packet_id, mmtp_timestamp, packet_sequence_number, packet_counter);
+
+	//if our header extension length is set, then block extract the header extension length, adn we should be at our payload data
+	uint8_t *mmtp_header_extension_value = NULL;
+
+	if(mmtp_header_extension_flag & 0x1) {
+		//clamp mmtp_header_extension_length
+		mmtp_header_extension_length = MIN(mmtp_header_extension_length, 2^16);
+		msg_Warn( p_demux, "mmtp_demuxer - doing  mmtp_header_extension_flag with size: %d", mmtp_header_extension_length);
+
+		mmtp_header_extension_value = malloc(mmtp_header_extension_length);
+		//read the header extension value up to the extension length field 2^16
+		buf = extract(buf, &mmtp_header_extension_value, mmtp_header_extension_length);
+	}
+
+	if(mmtp_payload_type == 0) {
+		//pull the mpu and frag iformation
+
+		uint8_t mpu_payload_length_block[2];
+		uint16_t mpu_payload_length = 0;
 
 //			msg_Warn( p_demux, "buf pos before mpu_payload_length extract is: %p", (void *)buf);
-	    	buf = extract(buf, &mpu_payload_length_block, 2);
-	    	mpu_payload_length = (mpu_payload_length_block[0] << 8) | mpu_payload_length_block[1];
-			//msg_Dbg( p_demux, "mmtp_demuxer - doing mpu_payload_length: %hu (0x%X 0x%X)",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1]);
+		buf = extract(buf, &mpu_payload_length_block, 2);
+		mpu_payload_length = (mpu_payload_length_block[0] << 8) | mpu_payload_length_block[1];
+		//msg_Dbg( p_demux, "mmtp_demuxer - doing mpu_payload_length: %hu (0x%X 0x%X)",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1]);
 
-	    	uint8_t mpu_fragmentation_info;
-			//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
-	    	buf = extract(buf, &mpu_fragmentation_info, 1);
+		uint8_t mpu_fragmentation_info;
+		//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
+		buf = extract(buf, &mpu_fragmentation_info, 1);
 
-	    	uint8_t mpu_fragment_type = (mpu_fragmentation_info & 0xF0) >> 4;
-	    	uint8_t mpu_timed_flag = (mpu_fragmentation_info & 0x8) >> 3;
-	    	uint8_t mpu_fragmentation_indicator = (mpu_fragmentation_info & 0x6) >> 1;
-	    	uint8_t mpu_aggregation_flag = (mpu_fragmentation_info & 0x1);
+		uint8_t mpu_fragment_type = (mpu_fragmentation_info & 0xF0) >> 4;
+		uint8_t mpu_timed_flag = (mpu_fragmentation_info & 0x8) >> 3;
+		uint8_t mpu_fragmentation_indicator = (mpu_fragmentation_info & 0x6) >> 1;
+		uint8_t mpu_aggregation_flag = (mpu_fragmentation_info & 0x1);
 
-	    	uint8_t mpu_fragmentation_counter;
+		uint8_t mpu_fragmentation_counter;
 //			msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
-	    	buf = extract(buf, &mpu_fragmentation_counter, 1);
+		buf = extract(buf, &mpu_fragmentation_counter, 1);
 
-    	    //re-fanagle
-    	    uint8_t mpu_sequence_number_block[4];
-    	    uint32_t mpu_sequence_number;
+		//re-fanagle
+		uint8_t mpu_sequence_number_block[4];
+		uint32_t mpu_sequence_number;
 //			msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
 
-    	    buf = extract(buf, &mpu_sequence_number_block, 4);
-			mpu_sequence_number = (mpu_sequence_number_block[0] << 24)  | (mpu_sequence_number_block[1] <<16) | (mpu_sequence_number_block[2] << 8) | (mpu_sequence_number_block[3]);
-			msg_Dbg( p_demux, "mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1], mpu_fragmentation_counter, mpu_sequence_number);
+		buf = extract(buf, &mpu_sequence_number_block, 4);
+		mpu_sequence_number = (mpu_sequence_number_block[0] << 24)  | (mpu_sequence_number_block[1] <<16) | (mpu_sequence_number_block[2] << 8) | (mpu_sequence_number_block[3]);
+		msg_Dbg( p_demux, "mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1], mpu_fragmentation_counter, mpu_sequence_number);
 
-	    	uint16_t data_unit_length = 0;
- 	    	int remainingPacketLen = -1;
+		uint16_t data_unit_length = 0;
+		int remainingPacketLen = -1;
 
- 	    	//todo - if FEC_type != 0, parse out source_FEC_payload_ID trailing bits...
-	    	do {
-				//pull out aggregate packets data unit length
-	    		int to_read_packet_length = -1;
-	    		//mpu_fragment_type
+		//todo - if FEC_type != 0, parse out source_FEC_payload_ID trailing bits...
+		do {
+			//pull out aggregate packets data unit length
+			int to_read_packet_length = -1;
+			//mpu_fragment_type
 
-	    		//only read DU length if mpu_aggregation_flag=1
-				if(mpu_aggregation_flag) {
-					uint8_t data_unit_length_block[2];
-					buf = extract(buf, &data_unit_length_block, 2);
-					data_unit_length = (data_unit_length_block[0] << 8) | (data_unit_length_block[1]);
-					to_read_packet_length = data_unit_length;
-					msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:1, to_read_packet_length: %d", __LINE__, to_read_packet_length);
+			//only read DU length if mpu_aggregation_flag=1
+			if(mpu_aggregation_flag) {
+				uint8_t data_unit_length_block[2];
+				buf = extract(buf, &data_unit_length_block, 2);
+				data_unit_length = (data_unit_length_block[0] << 8) | (data_unit_length_block[1]);
+				to_read_packet_length = data_unit_length;
+				msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:1, to_read_packet_length: %d", __LINE__, to_read_packet_length);
 
-				} else {
-					to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
-					msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:0, raw packet size: %d, buf: %p, raw_buf: %p, to_read_packet_length: %d", __LINE__, mmtp_raw_packet_size, buf, raw_buf, to_read_packet_length);
-				}
+			} else {
+				to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
+				msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:0, raw packet size: %d, buf: %p, raw_buf: %p, to_read_packet_length: %d", __LINE__, mmtp_raw_packet_size, buf, raw_buf, to_read_packet_length);
+			}
 
-				if(mpu_fragment_type != 0x2) {
-					//read our packet length just as a mpu metadata fragment or movie fragment metadata
-					//read our packet length without any mfu
-					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
+			if(mpu_fragment_type != 0x2) {
+				//read our packet length just as a mpu metadata fragment or movie fragment metadata
+				//read our packet length without any mfu
+				block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
 //					msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
 
-					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
-					tmp_mpu_fragment->i_buffer = to_read_packet_length;
+				buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
+				tmp_mpu_fragment->i_buffer = to_read_packet_length;
 
-					processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, 0, 0, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
-					remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
-					//this should only be non-zero if mpu_aggregration_flag=1
-					msg_Info(p_demux, "%d::mpu_fragment_type: %hu, remainingPacketLen: %d", __LINE__, mpu_fragment_type, remainingPacketLen);
+				processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, 0, 0, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
+				remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
+				//this should only be non-zero if mpu_aggregration_flag=1
+				msg_Info(p_demux, "%d::mpu_fragment_type: %hu, remainingPacketLen: %d", __LINE__, mpu_fragment_type, remainingPacketLen);
 
+			} else {
+				//mfu's have time and un-timed additional DU headers, so recalc to_read_packet_len after doing extract
+				//we use the du_header field
+				//parse data unit header here based upon mpu timed flag
+				uint32_t movie_fragment_sequence_number = 0;
+				uint32_t sample_number = 0;
+				uint32_t offset = 0;
+
+				/**
+				* MFU mpu_fragmentation_indicator==1's are prefixed by the following box, need to remove
+				*
+				aligned(8) class MMTHSample {
+				   unsigned int(32) sequence_number;
+				   if (is_timed) {
+
+					//interior block is 152 bits, or 19 bytes
+					  signed int(8) trackrefindex;
+					  unsigned int(32) movie_fragment_sequence_number
+					  unsigned int(32) samplenumber;
+					  unsigned int(8)  priority;
+					  unsigned int(8)  dependency_counter;
+					  unsigned int(32) offset;
+					  unsigned int(32) length;
+					//end interior block
+
+					  multiLayerInfo();
 				} else {
-					//mfu's have time and un-timed additional DU headers, so recalc to_read_packet_len after doing extract
-					//we use the du_header field
-					//parse data unit header here based upon mpu timed flag
-					uint32_t movie_fragment_sequence_number = 0;
-					uint32_t sample_number = 0;
-					uint32_t offset = 0;
-
-					/**
-					* MFU mpu_fragmentation_indicator==1's are prefixed by the following box, need to remove
-					*
-					aligned(8) class MMTHSample {
-					   unsigned int(32) sequence_number;
-					   if (is_timed) {
-
-					   	//interior block is 152 bits, or 19 bytes
-					      signed int(8) trackrefindex;
-					      unsigned int(32) movie_fragment_sequence_number
-					      unsigned int(32) samplenumber;
-					      unsigned int(8)  priority;
-					      unsigned int(8)  dependency_counter;
-					      unsigned int(32) offset;
-					      unsigned int(32) length;
-						//end interior block
-
-					      multiLayerInfo();
-					} else {
-							//additional 2 bytes to chomp for non timed delivery
-					      unsigned int(16) item_ID;
-					   }
-					}
-
-					aligned(8) class multiLayerInfo extends Box("muli") {
-					   bit(1) multilayer_flag;
-					   bit(7) reserved0;
-					   if (multilayer_flag==1) {
-					   	   //32 bits
-						  bit(3) dependency_id;
-						  bit(1) depth_flag;
-						  bit(4) reserved1;
-						  bit(3) temporal_id;
-						  bit(1) reserved2;
-						  bit(4) quality_id;
-						  bit(6) priority_id;
-					   }  bit(10) view_id;
-					   else{
-					   	   //16bits
-						  bit(6) layer_id;
-						  bit(3) temporal_id;
-						  bit(7) reserved3;
-					} }
-					*/
-
-					uint8_t mmthsample_len;
-					uint8_t mmthsample_sequence_number[4];
-
-					if(mpu_timed_flag) {
-						//112 bits in aggregate, 14 bytes
-						uint8_t timed_mfu_block[14];
-						buf = extract(buf, timed_mfu_block, 14);
-
-						movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
-						sample_number				   = (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
-						offset     					   = (timed_mfu_block[8] << 24) | (timed_mfu_block[9] << 16) | (timed_mfu_block[10] << 8) | (timed_mfu_block[11]);
-						uint8_t priority 						= timed_mfu_block[12];
-						uint8_t dep_counter						= timed_mfu_block[13];
-
-						//parse out mmthsample block if this is our first fragment or we are a complete fragment,
-						if(mpu_fragmentation_indicator == 0 || mpu_fragmentation_indicator == 1) {
-
-							//MMTHSample does not subclass box...
-							//buf = extract(buf, &mmthsample_len, 1);
-							buf = extract(buf, mmthsample_sequence_number, 4);
-
-							uint8_t mmthsample_timed_block[19];
-							buf = extract(buf, mmthsample_timed_block, 19);
-
-							//read multilayerinfo
-							uint8_t multilayerinfo_box_length[4];
-							uint8_t multilayerinfo_box_name[4];
-							uint8_t multilayer_flag;
-
-							buf = extract(buf, multilayerinfo_box_length, 4);
-							buf = extract(buf, multilayerinfo_box_name, 4);
-
-							buf = extract(buf, &multilayer_flag, 1);
-
-							int is_multilayer = (multilayer_flag >> 7) & 0x01;
-							//if MSB is 1, then read multilevel struct, otherwise just pull layer info...
-							if(is_multilayer) {
-								uint8_t multilayer_data_block[4];
-								buf = extract(buf, multilayer_data_block, 4);
-
-							} else {
-								uint8_t multilayer_layer_id_temporal_id[2];
-								buf = extract(buf, multilayer_layer_id_temporal_id, 2);
-							}
-
-							msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
-									mpu_fragmentation_indicator, movie_fragment_sequence_number, sample_number, offset, priority, dep_counter, is_multilayer);
-						} else {
-							msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
-									mpu_fragmentation_indicator, movie_fragment_sequence_number, sample_number, offset, priority, dep_counter);
-						}
-
-						//end mfu box read
-
-						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
-					} else {
-						uint8_t non_timed_mfu_block[4];
-						uint32_t non_timed_mfu_item_id;
-						//only 32 bits
-						buf = extract(buf, non_timed_mfu_block, 4);
-						non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
-
-						if(mpu_fragmentation_indicator == 1) {
-							//MMTHSample does not subclass box...
-							//buf = extract(buf, &mmthsample_len, 1);
-
-							buf = extract(buf, mmthsample_sequence_number, 4);
-
-							uint8_t mmthsample_item_id[2];
-							buf = extract(buf, mmthsample_sequence_number, 2);
-							//end reading of mmthsample box
-						}
-
-						msg_Info(p_demux, "mpu mode - non-timed MFU, item_id is: %zu", non_timed_mfu_item_id);
-						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
-					}
-
-					//msg_Dbg( p_demux, "before reading fragment packet:  %p", (void*)p_sys->p_mpu_block);
-
-					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
-					//msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
-
-					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
-					tmp_mpu_fragment->i_buffer = to_read_packet_length;
-
-					//send off only the CLEAN mdat payload from our MFU
-					processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, sample_number, offset, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
-					remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
-
+						//additional 2 bytes to chomp for non timed delivery
+					  unsigned int(16) item_ID;
+				   }
 				}
 
-	    	} while(mpu_aggregation_flag && remainingPacketLen>0);
+				aligned(8) class multiLayerInfo extends Box("muli") {
+				   bit(1) multilayer_flag;
+				   bit(7) reserved0;
+				   if (multilayer_flag==1) {
+					   //32 bits
+					  bit(3) dependency_id;
+					  bit(1) depth_flag;
+					  bit(4) reserved1;
+					  bit(3) temporal_id;
+					  bit(1) reserved2;
+					  bit(4) quality_id;
+					  bit(6) priority_id;
+				   }  bit(10) view_id;
+				   else{
+					   //16bits
+					  bit(6) layer_id;
+					  bit(3) temporal_id;
+					  bit(7) reserved3;
+				} }
+				*/
 
-	    }
+				uint8_t mmthsample_len;
+				uint8_t mmthsample_sequence_number[4];
 
+				if(mpu_timed_flag) {
+					//112 bits in aggregate, 14 bytes
+					uint8_t timed_mfu_block[14];
+					buf = extract(buf, timed_mfu_block, 14);
+
+					movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
+					sample_number				   = (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
+					offset     					   = (timed_mfu_block[8] << 24) | (timed_mfu_block[9] << 16) | (timed_mfu_block[10] << 8) | (timed_mfu_block[11]);
+					uint8_t priority 						= timed_mfu_block[12];
+					uint8_t dep_counter						= timed_mfu_block[13];
+
+					//parse out mmthsample block if this is our first fragment or we are a complete fragment,
+					if(mpu_fragmentation_indicator == 0 || mpu_fragmentation_indicator == 1) {
+
+						//MMTHSample does not subclass box...
+						//buf = extract(buf, &mmthsample_len, 1);
+						buf = extract(buf, mmthsample_sequence_number, 4);
+
+						uint8_t mmthsample_timed_block[19];
+						buf = extract(buf, mmthsample_timed_block, 19);
+
+						//read multilayerinfo
+						uint8_t multilayerinfo_box_length[4];
+						uint8_t multilayerinfo_box_name[4];
+						uint8_t multilayer_flag;
+
+						buf = extract(buf, multilayerinfo_box_length, 4);
+						buf = extract(buf, multilayerinfo_box_name, 4);
+
+						buf = extract(buf, &multilayer_flag, 1);
+
+						int is_multilayer = (multilayer_flag >> 7) & 0x01;
+						//if MSB is 1, then read multilevel struct, otherwise just pull layer info...
+						if(is_multilayer) {
+							uint8_t multilayer_data_block[4];
+							buf = extract(buf, multilayer_data_block, 4);
+
+						} else {
+							uint8_t multilayer_layer_id_temporal_id[2];
+							buf = extract(buf, multilayer_layer_id_temporal_id, 2);
+						}
+
+						msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
+								mpu_fragmentation_indicator, movie_fragment_sequence_number, sample_number, offset, priority, dep_counter, is_multilayer);
+					} else {
+						msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
+								mpu_fragmentation_indicator, movie_fragment_sequence_number, sample_number, offset, priority, dep_counter);
+					}
+
+					//end mfu box read
+
+					to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
+				} else {
+					uint8_t non_timed_mfu_block[4];
+					uint32_t non_timed_mfu_item_id;
+					//only 32 bits
+					buf = extract(buf, non_timed_mfu_block, 4);
+					non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
+
+					if(mpu_fragmentation_indicator == 1) {
+						//MMTHSample does not subclass box...
+						//buf = extract(buf, &mmthsample_len, 1);
+
+						buf = extract(buf, mmthsample_sequence_number, 4);
+
+						uint8_t mmthsample_item_id[2];
+						buf = extract(buf, mmthsample_sequence_number, 2);
+						//end reading of mmthsample box
+					}
+
+					msg_Info(p_demux, "mpu mode - non-timed MFU, item_id is: %zu", non_timed_mfu_item_id);
+					to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
+				}
+
+				//msg_Dbg( p_demux, "before reading fragment packet:  %p", (void*)p_sys->p_mpu_block);
+
+				block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
+				//msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
+
+				buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
+				tmp_mpu_fragment->i_buffer = to_read_packet_length;
+
+				//send off only the CLEAN mdat payload from our MFU
+				processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, sample_number, offset, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
+				remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
+
+			}
+
+		} while(mpu_aggregation_flag && remainingPacketLen>0);
+	}
+
+	//chain our demux call to demuxFrag?
+	if(has_called_mp4_ftyp_demuxer) {
+		DemuxFrag(p_demux);
 	}
 
 	return VLC_DEMUXER_SUCCESS;
@@ -1456,7 +1461,7 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
 
 			//__mp4_Demux(mp4_demux);
 			//use the fragmented demuxer
-			DemuxFrag(p_demux);
+		//	DemuxFrag(p_demux);
 
 			//clear out block buffer
 
@@ -6640,6 +6645,8 @@ static int DemuxFrag( demux_t *p_demux )
 end:
     if( i_status == VLC_DEMUXER_EOF )
     {
+        msg_Info(p_demux, "%d:DemuxFrag, status: %d", __LINE__, i_status);
+
         vlc_tick_t i_demux_end = INT64_MIN;
         for( unsigned i = 0; i < p_sys->i_tracks; i++ )
         {
@@ -6650,9 +6657,12 @@ end:
         }
         if( i_demux_end != INT64_MIN )
             es_out_SetPCR( p_demux->out, VLC_TICK_0 + i_demux_end );
+
+        //reset i_status to SUCESS in fragment mode
+        i_status = VLC_DEMUXER_SUCCESS;
     }
 
-    msg_Info(p_demux, "%d:DemuxFrag", __LINE__);
+    msg_Info(p_demux, "%d:DemuxFrag, status: %d", __LINE__, i_status);
 
     return i_status;
 }
