@@ -326,7 +326,7 @@ static void MP4_GetInterleaving( demux_t *p_demux, vlc_tick_t *pi_max_contiguous
 
 
 //short reads from UDP may happen on starutp buffering or truncation
-#define MIN_MMTP_SIZE 224
+#define MIN_MMTP_SIZE 32
 #define MAX_MMTP_SIZE 1514
 #define MAX_MMT_REFRAGMENT_SIZE 65535
 
@@ -1193,7 +1193,7 @@ static int Demux( demux_t *p_demux )
 //			msg_Warn( p_demux, "buf pos before mpu_payload_length extract is: %p", (void *)buf);
 	    	buf = extract(buf, &mpu_payload_length_block, 2);
 	    	mpu_payload_length = (mpu_payload_length_block[0] << 8) | mpu_payload_length_block[1];
-			msg_Warn( p_demux, "mmtp_demuxer - doing mpu_payload_length: %hu (0x%X 0x%X)",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1]);
+			//msg_Dbg( p_demux, "mmtp_demuxer - doing mpu_payload_length: %hu (0x%X 0x%X)",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1]);
 
 	    	uint8_t mpu_fragmentation_info;
 			//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
@@ -1207,7 +1207,6 @@ static int Demux( demux_t *p_demux )
 	    	uint8_t mpu_fragmentation_counter;
 //			msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
 	    	buf = extract(buf, &mpu_fragmentation_counter, 1);
-    	    msg_Info(p_demux, "mpu_fragmentation_counter: %d", mpu_fragmentation_counter);
 
     	    //re-fanagle
     	    uint8_t mpu_sequence_number_block[4];
@@ -1216,11 +1215,12 @@ static int Demux( demux_t *p_demux )
 
     	    buf = extract(buf, &mpu_sequence_number_block, 4);
 			mpu_sequence_number = (mpu_sequence_number_block[0] << 24)  | (mpu_sequence_number_block[1] <<16) | (mpu_sequence_number_block[2] << 8) | (mpu_sequence_number_block[3]);
-    	    msg_Info(p_demux, "mpu_sequence_number: %d", mpu_sequence_number);
+			msg_Dbg( p_demux, "mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1], mpu_fragmentation_counter, mpu_sequence_number);
 
 	    	uint16_t data_unit_length = 0;
  	    	int remainingPacketLen = -1;
 
+ 	    	//todo - if FEC_type != 0, parse out source_FEC_payload_ID trailing bits...
 	    	do {
 				//pull out aggregate packets data unit length
 	    		int to_read_packet_length = -1;
@@ -1250,8 +1250,8 @@ static int Demux( demux_t *p_demux )
 
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, 0, 0, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
 					remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
-					msg_Info(p_demux, "%d::mpu_fragment_type!=0x2, remainingPacketLen: %d", __LINE__, remainingPacketLen);
-
+					//this should only be non-zero if mpu_aggregration_flag=1
+					msg_Info(p_demux, "%d::mpu_fragment_type: %hu, remainingPacketLen: %d", __LINE__, mpu_fragment_type, remainingPacketLen);
 
 				} else {
 					//mfu's have time and un-timed additional DU headers, so recalc to_read_packet_len after doing extract
@@ -1394,14 +1394,14 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
 	if(tmp_mpu_fragment) {
 		msg_Info(p_demux, "processMpuPacket before test3");
 
-		msg_Info(p_demux, "processMpuPacket - before p_mpu_block with tmp_mpu_fragment: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
+		msg_Info(p_demux, "processMpuPacket - before p_mpu_block with mpu_sequence_number: %hu, mpu_sample_number: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p,", mpu_sequence_number, mpu_sample_number, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block);;
+		dumpMfu(p_demux, tmp_mpu_fragment);
 
 		block_ChainAppend(&p_sys->p_mpu_block, block_Duplicate(tmp_mpu_fragment));
 		p_sys->p_mpu_block = block_ChainGather(p_sys->p_mpu_block);
 
-		msg_Info(p_demux, "processMpuPacket - NEW p_mpu_block with tmp_mpu_fragment: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mmtp_packet_id, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
+//		msg_Info(p_demux, "processMpuPacket - NEW p_mpu_block with mpu_sample_number: %hu, mpu_fragment_type: %d, mpu_fragmentation_indicatior: %d, p_mpu_block is: %p, size is now: %d", mpu_sample_number, mpu_fragment_type, mpu_fragmentation_indicator, (void*)p_sys->p_mpu_block, p_sys->p_mpu_block->i_buffer );
 
-		dumpMfu(p_demux, p_sys->p_mpu_block);
 		last_mpu_fragment_type = mpu_fragment_type;
 	}
 }
