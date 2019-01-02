@@ -1,3 +1,11 @@
+# jdj-2019-01-02 - adding support for ISO 23008-1 MMTP (Mpeg Media Transport Protocol) Demuxer for VLC.
+
+See also the following repo for OTA MMT captures for testing:
+
+https://github.com/jjustman/atsc-3.0-mmt-pcaps
+
+---
+
 README for the VLC media player
 ===============================
 
