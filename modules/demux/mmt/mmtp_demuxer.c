@@ -254,6 +254,7 @@ typedef struct
     vlc_thread_t  demux_frag_thread;
     vlc_sem_t demux_frag_new_data_semaphore;
     stream_t *s_frag;
+    block_fifo_t *s_frag_next;
 
     /** temp hacks until we have a map of mpu_sequence_numbers, use -1 for default values (0 is valid in mmtp spec)**/
     sig_atomic_t last_mpu_sequence_number;
@@ -533,16 +534,35 @@ static void *DemuxFragThreadLoop(void *p_data) {
     demux_t *p_demux = (demux_t *) p_data;
     demux_sys_t *p_sys = p_demux->p_sys;
 
+
     for(;;) {
         vlc_sem_wait(&p_sys->demux_frag_new_data_semaphore);
         int canc = vlc_savecancel();
 
-        DemuxFrag(p_demux);
+        //read from backing fifo and swap s_frag
+        //only update s_frag if we have new data in our
+        vlc_fifo_Lock(p_sys->s_frag_next);
+        if(!vlc_fifo_IsEmpty(p_sys->s_frag_next)) {
+
+        	//we alreay hold the lock, so instead of calling block_FifoGet use vlc_fifo_DequeueUnlocked
+        	block_t *mpu = vlc_fifo_DequeueUnlocked(p_sys->s_frag_next);
+        	if(mpu) {
+        		if(p_sys->s_frag) {
+        			//free our last stream fragment
+        		    vlc_stream_Delete(p_sys->s_frag);
+        		}
+        		p_sys->s_frag = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
+        	}
+        }
+        vlc_fifo_Unlock(p_sys->s_frag_next);
+
+        //call demuxer anyways...
+    	DemuxFrag(p_demux);
 
         vlc_restorecancel (canc);
     }
 
-    return NULL;
+    vlc_assert_unreachable();
 }
 
 /*
@@ -584,9 +604,11 @@ static int Open( vlc_object_t * p_this )
     p_sys->obj = p_this;
     p_sys->context.i_lastseqnumber = UINT32_MAX;
     p_sys->p_mpu_block = NULL;
-    p_sys->b_seekable = false;
+    p_sys->b_seekable = true;
     p_sys->b_fragmented = true;
-    p_sys->s_frag = vlc_stream_fifo_New(p_this);
+
+    //vlc_stream_fifo doesn't support seeking, which is required for libmp4 box parsing, so double buffer into s_frag
+    p_sys->s_frag_next = block_FifoNew();
     vlc_sem_init(&p_sys->demux_frag_new_data_semaphore, 0);
 
     p_sys->last_mpu_sequence_number = -1;
@@ -974,6 +996,9 @@ static void Close( vlc_object_t *p_this )
 	demux_sys_t *p_sys = p_demux->p_sys;
 
     if(p_sys->demux_frag_thread) {
+    	//send one last semaphore
+		vlc_sem_post(&p_sys->demux_frag_new_data_semaphore);
+
     	vlc_cancel(p_sys->demux_frag_thread);
     	vlc_join(p_sys->demux_frag_thread, NULL);
     	p_sys->demux_frag_thread = NULL;
@@ -982,8 +1007,13 @@ static void Close( vlc_object_t *p_this )
     //close the fifo once our consumer is shutdown
     if(p_sys->s_frag) {
     	vlc_stream_fifo_Close(p_sys->s_frag);
+        p_sys->s_frag = NULL;
     }
-    p_sys->s_frag = NULL;
+
+    if(p_sys->s_frag_next) {
+    	block_FifoRelease(p_sys->s_frag_next);
+    	p_sys->s_frag_next = NULL;
+    }
 
     vlc_sem_destroy(&p_sys->demux_frag_new_data_semaphore);
 
@@ -1471,22 +1501,27 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
 		if(p_sys->p_mpu_block && p_sys->p_mpu_block->i_buffer > 0) {
 			msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** to ISOBMFF - last_mpu_sequence_number: %hu, mpu_sequence_number: %hu, pending p_mpu_block is: %zu", p_sys->last_mpu_sequence_number, mpu_sequence_number, p_sys->p_mpu_block->i_buffer);
 			block_t* mpu = block_ChainGather(p_sys->p_mpu_block);
-			vlc_stream_fifo_Queue(p_sys->s_frag, block_Duplicate(mpu));
-
-			block_Release(p_sys->p_mpu_block);
-			p_sys->p_mpu_block = NULL;
+			block_FifoPut(p_sys->s_frag_next, block_Duplicate(mpu));
 
 		//	msg_Info(p_demux, "processMpuPacket ********** FINALIZING MFU ********** mpu block i_buffer is: %zu length\nfirst 32 bits are: 0x%x 0x%x 0x%x 0x%x\nnext  32 bits are: 0x%x 0x%x 0x%x 0x%x",mpu->i_buffer, mpu->p_buffer[0], mpu->p_buffer[1], mpu->p_buffer[2], mpu->p_buffer[3], mpu->p_buffer[4], mpu->p_buffer[5], mpu->p_buffer[6], mpu->p_buffer[7]);
 			dumpMpu(p_demux, mpu);
 
 
 			if(!p_sys->has_processed_ftype_moov) {
+				//for our first pass, push mpu into p_sys->s_frag as memory stream
+				p_sys->s_frag = vlc_stream_MemoryNew( p_sys->obj, mpu->p_buffer, mpu->i_buffer, true);
+
 				__processFirstMpuFragment(p_demux);
 				p_sys->has_processed_ftype_moov = 1;
 			}
 
 			//signal the demux_frag for isobmff processing
 			vlc_sem_post(&p_sys->demux_frag_new_data_semaphore);
+
+			//released in block_chainGather - block_Release(p_sys->p_mpu_block);
+			p_sys->p_mpu_block = NULL;
+			block_Release(mpu);
+
 
 		//	msg_Info(p_demux, "processMpuPacket ******* FINALIZING MFU ******** block_Release complete");
 
