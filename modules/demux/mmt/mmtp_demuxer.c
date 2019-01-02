@@ -1261,12 +1261,58 @@ static int Demux( demux_t *p_demux )
 					uint32_t sample_number = 0;
 					uint32_t offset = 0;
 
+					/**
+					* MFU mpu_fragmentation_indicator==1's are prefixed by the following box, need to remove
+					*
+					aligned(8) class MMTHSample {
+					   unsigned int(32) sequence_number;
+					   if (is_timed) {
+
+					   	//interior block is 152 bits, or 19 bytes
+					      signed int(8) trackrefindex;
+					      unsigned int(32) movie_fragment_sequence_number
+					      unsigned int(32) samplenumber;
+					      unsigned int(8)  priority;
+					      unsigned int(8)  dependency_counter;
+					      unsigned int(32) offset;
+					      unsigned int(32) length;
+						//end interior block
+
+					      multiLayerInfo();
+					} else {
+							//additional 2 bytes to chomp for non timed delivery
+					      unsigned int(16) item_ID;
+					   }
+					}
+
+					aligned(8) class multiLayerInfo extends Box("muli") {
+					   bit(1) multilayer_flag;
+					   bit(7) reserved0;
+					   if (multilayer_flag==1) {
+					   	   //32 bits
+						  bit(3) dependency_id;
+						  bit(1) depth_flag;
+						  bit(4) reserved1;
+						  bit(3) temporal_id;
+						  bit(1) reserved2;
+						  bit(4) quality_id;
+						  bit(6) priority_id;
+					   }  bit(10) view_id;
+					   else{
+					   	   //16bits
+						  bit(6) layer_id;
+						  bit(3) temporal_id;
+						  bit(7) reserved3;
+					} }
+					*/
+
+					//uint8_t mmthsample_len;  even tho its written as aligned(8), doesn't appear to match up?
+					uint8_t mmthsample_sequence_number[4];
+
 					if(mpu_timed_flag) {
 						//112 bits in aggregate, 14 bytes
 						uint8_t timed_mfu_block[14];
 						buf = extract(buf, &timed_mfu_block, 14);
-						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
-
 
 						movie_fragment_sequence_number = (timed_mfu_block[0] << 24) | (timed_mfu_block[1] << 16) | (timed_mfu_block[2]  << 8) | (timed_mfu_block[3]);
 						sample_number				   = (timed_mfu_block[4] << 24) | (timed_mfu_block[5] << 16) | (timed_mfu_block[6]  << 8) | (timed_mfu_block[7]);
@@ -1274,26 +1320,76 @@ static int Demux( demux_t *p_demux )
 						uint8_t priority 						= timed_mfu_block[12];
 						uint8_t dep_counter						= timed_mfu_block[13];
 
-						msg_Info(p_demux, "mpu mode -timed MFU, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
-								movie_fragment_sequence_number, sample_number, offset, priority, dep_counter);
-					} else {
-						//only 32 bits
-						uint8_t non_timed_mfu_block[4];
-						uint32_t non_timed_mfu_item_id;
-						buf = extract(buf, &non_timed_mfu_block, 4);
+						//parse out mmthsample block if this is our first fragment
+						if(mpu_fragmentation_indicator == 1) {
+
+							//buf = extract(buf, &mmthsample_len, 1);
+							buf = extract(buf, &mmthsample_sequence_number, 4);
+
+							uint8_t mmthsample_timed_block[19];
+							buf = extract(buf, &mmthsample_timed_block, 19);
+
+							//read multilayerinfo
+							uint8_t multilayerinfo_length;
+							uint8_t multilayerinfo_box_name[4];
+							uint8_t multilayer_flag;
+
+							buf = extract(buf, &multilayerinfo_length, 1);
+							buf = extract(buf, &multilayerinfo_box_name, 4);
+
+							buf = extract(buf, &multilayer_flag, 1);
+
+							int is_multilayer = (multilayer_flag >> 7) & 0x01;
+							//if MSB is 1, then read multilevel struct, otherwise just pull layer info...
+							if(is_multilayer) {
+								uint8_t multilayer_data_block[4];
+								buf = extract(buf, &multilayer_data_block, 4);
+
+							} else {
+								uint8_t multilayer_layer_id_temporal_id[2];
+								buf = extract(buf, &multilayer_layer_id_temporal_id, 2);
+							}
+						}
+
+						//end mfu box read
+
+						msg_Info(p_demux, "mpu mode -timed MFU, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
+								movie_fragment_sequence_number, sample_number, offset, priority, dep_counter, is_multilayer);
+
+
 						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
+					} else {
 
 						non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
+
+						if(mpu_fragmentation_indicator == 1) {
+							//only 32 bits
+							uint8_t non_timed_mfu_block[4];
+							uint32_t non_timed_mfu_item_id;
+							buf = extract(buf, &non_timed_mfu_block, 4);
+
+							//read mmthsample
+							buf = extract(buf, &mmthsample_len, 1);
+							buf = extract(buf, &mmthsample_sequence_number, 4);
+
+							uint8_t mmthsample_item_id[2];
+							buf = extract(buf, &mmthsample_sequence_number, 2);
+							//end reading of mmthsample box
+						}
+
 						msg_Info(p_demux, "mpu mode - non-timed MFU, item_id is: %zu", non_timed_mfu_item_id);
+						to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
 					}
 
-//					msg_Dbg( p_demux, "before reading fragment packet:  %p", (void*)p_sys->p_mpu_block);
+					//msg_Dbg( p_demux, "before reading fragment packet:  %p", (void*)p_sys->p_mpu_block);
 
 					block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
 					msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
 
 					buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 					tmp_mpu_fragment->i_buffer = to_read_packet_length;
+
+					//send off only the CLEAN mdat payload from our MFU
 					processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, sample_number, offset, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
 					remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
 
