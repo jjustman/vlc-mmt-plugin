@@ -1320,8 +1320,8 @@ static int Demux( demux_t *p_demux )
 						uint8_t priority 						= timed_mfu_block[12];
 						uint8_t dep_counter						= timed_mfu_block[13];
 
-						//parse out mmthsample block if this is our first fragment
-						if(mpu_fragmentation_indicator == 1) {
+						//parse out mmthsample block if this is our first fragment or we are a complete fragment,
+						if(mpu_fragmentation_indicator == 0 || mpu_fragmentation_indicator == 1) {
 
 							//MMTHSample does not subclass box...
 							//buf = extract(buf, &mmthsample_len, 1);
@@ -1351,8 +1351,8 @@ static int Demux( demux_t *p_demux )
 								buf = extract(buf, multilayer_layer_id_temporal_id, 2);
 							}
 
-							msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: 1, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
-														movie_fragment_sequence_number, sample_number, offset, priority, dep_counter, is_multilayer);
+							msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
+									mpu_fragmentation_indicator, movie_fragment_sequence_number, sample_number, offset, priority, dep_counter, is_multilayer);
 						} else {
 							msg_Info(p_demux, "mpu mode, timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
 									mpu_fragmentation_indicator, movie_fragment_sequence_number, sample_number, offset, priority, dep_counter);
