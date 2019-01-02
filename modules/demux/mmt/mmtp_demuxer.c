@@ -1323,18 +1323,19 @@ static int Demux( demux_t *p_demux )
 						//parse out mmthsample block if this is our first fragment
 						if(mpu_fragmentation_indicator == 1) {
 
-							buf = extract(buf, &mmthsample_len, 1);
+							//MMTHSample does not subclass box...
+							//buf = extract(buf, &mmthsample_len, 1);
 							buf = extract(buf, mmthsample_sequence_number, 4);
 
 							uint8_t mmthsample_timed_block[19];
 							buf = extract(buf, mmthsample_timed_block, 19);
 
 							//read multilayerinfo
-							uint8_t multilayerinfo_length;
+							uint8_t multilayerinfo_box_length[4];
 							uint8_t multilayerinfo_box_name[4];
 							uint8_t multilayer_flag;
 
-							buf = extract(buf, &multilayerinfo_length, 1);
+							buf = extract(buf, multilayerinfo_box_length, 4);
 							buf = extract(buf, multilayerinfo_box_name, 4);
 
 							buf = extract(buf, &multilayer_flag, 1);
@@ -1368,8 +1369,9 @@ static int Demux( demux_t *p_demux )
 						non_timed_mfu_item_id = (non_timed_mfu_block[0] << 24) | (non_timed_mfu_block[1] << 16) | (non_timed_mfu_block[2] << 8) | non_timed_mfu_block[3];
 
 						if(mpu_fragmentation_indicator == 1) {
-							//read mmthsample
-							buf = extract(buf, &mmthsample_len, 1);
+							//MMTHSample does not subclass box...
+							//buf = extract(buf, &mmthsample_len, 1);
+
 							buf = extract(buf, mmthsample_sequence_number, 4);
 
 							uint8_t mmthsample_item_id[2];
