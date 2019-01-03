@@ -101,6 +101,7 @@ static int  Open( vlc_object_t * );
 static void Close ( vlc_object_t * );
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
+#define uS 1000000
 
 #define DEMUX_INCREMENT VLC_TICK_FROM_MS(250) /* How far the pcr will go, each round */
 #define DEMUX_TRACK_MAX_PRELOAD VLC_TICK_FROM_SEC(15) /* maximum preloading, to deal with interleaving */
@@ -1220,14 +1221,16 @@ void createTracksFromMpuMetadata(demux_t* p_demux) {
 
 /**
  * ala java multiKeyMap
- * map of <mmtp_packet_id, mpu_sequence_number, mpu_samples>
- * mpu_samples {
+ * map of <mmtp_packet_id, mpu_sequence_number, movie_fragment_sequence_number> => mpu
+ * mpu {
  * 	mpu_metadata - contains ftyp/mmpu/moov/meta boxes for <packet_id> key
  * 	movie_fragment_metadata - contains moof/mdat boxes for <packet_id, mpu_sequence_number> mfu's
  * 	mfu - media_fragment_unit
  *
- * 	first_mfu_fragment
- *  list<mfu>
+ *  if(timed) movie_fragment_sequence_number
+ * 	mpu_fragment first_mpu_fragment
+ *  TreeSet<mpu_fragment>::ordered sample_number
+ *
  * 	last_fragment
  *
  */
@@ -1304,12 +1307,14 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
         	timespec_get(&ts, TIME_UTC);
 
         	//convert to microseconds
-            uint64_t t = 1000000 + ((ts.tv_sec) * 1000000ULL) + ((ts.tv_nsec) / 1000ULL) ; // convert tv_sec & tv_usec to millisecond
+            uint64_t t = ((ts.tv_sec) * 1000000ULL) + ((ts.tv_nsec) / 1000ULL) ; // convert tv_sec & tv_usec to millisecond
 
         	es_out_SetPCR( p_demux->out, t );
 
-        	//TODO - use traf/tfdt for actual sample decoding time
-        	tmp_mpu_fragment->i_pts = t + 16000;
+        	//TODO - use traf/tfdt for actual sample decoding time based upon mvhd.timescale (p_sys->i_timescale)
+        	//for now, use the rational 1001 * uS / 60000 * uS ~ 16000us
+        	uint64_t manual_pts_calculation = 1000000 + t + ((1001 * uS) / (60000 *uS));
+        	tmp_mpu_fragment->i_pts = manual_pts_calculation;
 
 			if(mpu_fragmentation_indicator == 0x00) {
 				//flush single packet

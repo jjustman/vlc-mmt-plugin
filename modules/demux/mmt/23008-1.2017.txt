@@ -1,0 +1,105 @@
+
+
+data_type definitions:
+
+V1 Data Types
+-------------
+
+Value		Data Type					Definition of data unit
+-----		---------					-----------------------
+0x0			MPU							media-aware fragment of hte MPU
+0x1			generic object				generic object such as a complete MPU or object of another type
+0x2			signalling message			one or more signaling messages or a fragment of a signaling message
+0x3			repair symbol				a single complete repair symbol
+0x4 ~ 0x9	reserved for iso use		for ISO use
+0xA ~ 0xF	reserved for private use	for private use
+
+
+
+<10.1> Signalling - General
+
+Eight types of signalling message for package consumption:
+
+	PA:  	package access, contains tables for all tables required for package access
+	MPT: 	media presentation information, contains presentation information document
+	MPT: 	MMT package table for single package consumption
+	CRI: 	clock related information, maps between NTP and MPEG-2 system time clock
+	DCI: 	device capability message
+	SSWR: 	security software request, request security software for consuming a package or asset
+	LS:		licensing signalling, carries license information targeted to a specific MMT receiving entity or group of receivers
+	LR: 	license revocation, used for revocation for a user or group of users
+
+Nine types of signalling for package delivery:
+
+	HRBM:	provide information to configure a HRBM operation
+	MC:		measurement configuration message, provide information for measurement of delivery quality
+	ARQ-AC:	automatic repeat-request (ARQ) configuration message (AC)
+	ARQ-AF:	automatic repeat-request (ARQ) feedback message (AF)
+	RQF:	reception quality feedback for reporting by MMT receiving entity
+	MANF:	NAM feedback bessage, provide information of the NAM parameter by an MMT receving entity
+	LDC:	information required to decode and present media data by MMT receiving entity before receving metadata such as movie fragment headers
+	HRBMR:	management of MMT de-encapsulation buffer depending on operation mode of client
+	ADC:	asset delivery characteristic message, used to configure network delivery resource
+	
+
+
+
+<10.2> Signalling message format
+
+three common fields, one specific field, message payload:
+
+
+general format of MMT signalling messages:
+
+syntax							no. bits	mnemonic
+------							--------	--------
+signalling_message() {	
+	message_id					16			uimbsf
+	version						8			uimbsf
+	
+	if(message_id != PA_message && message_id != MPI_message)
+		length					16			uimbsf
+	else
+		length					32
+		
+	extension
+		message_payload {
+	}
+}
+	
+	
+<10.3.2> PA message
+
+Package Access contains:
+	PA Table, 
+	MPI Table (complete or subset 0)
+	MP Table  (complete or subset 0)
+	CRI Table
+	DCI Table
+
+PA_message() {
+	signaling_message() 		40
+	
+	extension {
+		number_of_tables	N1	8
+		for(i=0; i<N1; i++) {
+			table_id			8
+			table_version		8
+			table_length		16
+		}	
+	}
+	
+	message_payload {
+		for(i=0; i<N1; i++)
+			table()
+		}		
+	}
+}
+
+MPI Message - Media Presentation Information
+presentation information document
+
+
+
+
+< ISO/IEC 23008-1:2017 >
