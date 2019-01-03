@@ -230,7 +230,7 @@ static void     MP4_TrackSetELST( demux_t *, mp4_track_t *, vlc_tick_t );
 
 static MP4_Box_t * MP4_GetTrexByTrackID( MP4_Box_t *p_moov, const uint32_t i_id );
 
-static int CreateTracks( demux_t *p_demux, unsigned i_tracks );
+static int CreateTracks( mmtp_sub_flow_t *mmtp_sub_flow, unsigned i_tracks );
 
 static stime_t GetMoovTrackDuration( demux_sys_t *p_sys, unsigned i_track_ID );
 
@@ -559,7 +559,7 @@ static int Demux( demux_t *p_demux )
 		return VLC_DEMUXER_SUCCESS;
 	}
 
-    msg_Info(p_demux, "mmtp_demuxer: vlc_stream_readblock size is: %d", read_block->i_buffer);
+    msg_Info(p_demux, "%d:mmtp_demuxer: vlc_stream_readblock size is: %d", __LINE__, read_block->i_buffer);
     mmtp_raw_packet_size =  read_block->i_buffer;
 
    	if( mmtp_raw_packet_size > MAX_MMTP_SIZE || mmtp_raw_packet_size < MIN_MMTP_SIZE) {
@@ -585,7 +585,15 @@ static int Demux( demux_t *p_demux )
 	uint8_t *buf = p_sys->buf;
 
 	//create a sub_flow with this packet_id
-	msg_Info( p_demux, "%d:mmtp_demuxer - before mmtp_sub_flow_vector is: %p", __LINE__, mmtp_sub_flow_vector);
+	msg_Info( p_demux, "%d:mmtp_demuxer, after mmtp_packet_header_parse_from_raw_packet, mmtp_packet_id is: %d, mmtp_payload_type: %d, remaining len: %d, mmtp_raw_packet_size: %d, buf: %p, raw_buf:%p",
+			__LINE__,
+			mmtp_packet_header->mmtp_packet_header.mmtp_packet_id,
+			mmtp_packet_header->mmtp_packet_header.mmtp_payload_type,
+			(mmtp_raw_packet_size - (buf - raw_buf)),
+			mmtp_raw_packet_size,
+			buf,
+			raw_buf);
+
 
 	mmtp_sub_flow = mmtp_sub_flow_vector_get_or_set_packet_id(mmtp_sub_flow_vector, mmtp_packet_header->mmtp_packet_header.mmtp_packet_id);
 	msg_Info( p_demux, "%d:mmtp_demuxer - mmtp_sub_flow is: %p, mmtp_sub_flow->mpu_fragments: %p", __LINE__, mmtp_sub_flow, mmtp_sub_flow->mpu_fragments);
@@ -613,6 +621,7 @@ static int Demux( demux_t *p_demux )
 		//read the header extension value up to the extension length field 2^16
 		buf = extract(buf, &mmtp_packet_header->mmtp_packet_header.mmtp_header_extension_value, mmtp_packet_header->mmtp_packet_header.mmtp_header_extension_length);
 	}
+
 
 	if(mmtp_packet_header->mmtp_packet_header.mmtp_payload_type == 0) {
 		//VECTOR:  TODO - refactor this into helper method
@@ -656,7 +665,8 @@ static int Demux( demux_t *p_demux )
 
 		buf = extract(buf, &mpu_sequence_number_block, 4);
 		mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_sequence_number = (mpu_sequence_number_block[0] << 24)  | (mpu_sequence_number_block[1] <<16) | (mpu_sequence_number_block[2] << 8) | (mpu_sequence_number_block[3]);
-		msg_Dbg( p_demux, "mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",
+		msg_Dbg( p_demux, "%d:mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",
+				__LINE__,
 				mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_payload_length,
 				mpu_payload_length_block[0],
 				mpu_payload_length_block[1],
@@ -682,11 +692,12 @@ static int Demux( demux_t *p_demux )
 				buf = extract(buf, &data_unit_length_block, 2);
 				mmtp_packet_header->mmtp_mpu_type_packet_header.data_unit_length = (data_unit_length_block[0] << 8) | (data_unit_length_block[1]);
 				to_read_packet_length = mmtp_packet_header->mmtp_mpu_type_packet_header.data_unit_length;
-				msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:1, to_read_packet_length: %d", __LINE__, to_read_packet_length);
+				msg_Info(p_demux, "%d:mpu data unit size: %d, mpu_aggregation_flag:1, to_read_packet_length: %d",
+						__LINE__, mmtp_packet_header->mmtp_mpu_type_packet_header.data_unit_length, to_read_packet_length);
 
 			} else {
 				to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
-				msg_Info(p_demux, "%d:mpu data unit size: mpu_aggregation_flag:0, raw packet size: %d, buf: %p, raw_buf: %p, to_read_packet_length: %d",
+				msg_Info(p_demux, "%d: skipping data_unit_size: mpu_aggregation_flag:0, raw packet size: %d, buf: %p, raw_buf: %p, to_read_packet_length: %d",
 						__LINE__, mmtp_raw_packet_size, buf, raw_buf, to_read_packet_length);
 			}
 
@@ -804,15 +815,18 @@ static int Demux( demux_t *p_demux )
 							buf = extract(buf, multilayer_layer_id_temporal_id, 2);
 						}
 
-						msg_Info(p_demux, "mpu mode (0x02), timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
+						msg_Info(p_demux, "%d:mpu mode (0x02), timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d, multilayer: %d",
+							__LINE__,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.movie_fragment_sequence_number,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.sample_number,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.offset,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.priority,
-							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.dep_counter, is_multilayer);
+							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.dep_counter,
+							is_multilayer);
 					} else {
-						msg_Info(p_demux, "mpu mode (0x02), timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
+						msg_Info(p_demux, "%d:mpu mode (0x02), timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %zu, sample_num: %zu, offset: %zu, pri: %d, dep_counter: %d",
+							__LINE__,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.movie_fragment_sequence_number,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.sample_number,
@@ -848,7 +862,12 @@ static int Demux( demux_t *p_demux )
 					to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
 				}
 
-				//msg_Dbg( p_demux, "before reading fragment packet:  %p", mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_data_unit_payload);
+				msg_Dbg( p_demux, "%d:before reading fragment packet: reading length: %d (mmtp_raw_packet_size: %d, buf: %p, raw_buf:%p)",
+						__LINE__,
+						to_read_packet_length,
+						mmtp_raw_packet_size,
+						buf,
+						raw_buf);
 
 				block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
 				//msg_Info(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
@@ -862,6 +881,9 @@ static int Demux( demux_t *p_demux )
 				processMpuPacket(p_demux, mmtp_sub_flow, mmtp_packet_header);
 
 				remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
+				msg_Dbg( p_demux, "%d:after reading fragment packet: remainingPacketLen: %d",
+										__LINE__,
+										remainingPacketLen);
 
 			}
 
@@ -940,7 +962,7 @@ void createTracksFromMpuMetadata(demux_t *p_obj, mmtp_sub_flow_t* mmtp_sub_flow)
 	}
 	msg_Dbg( p_obj, "%d:createTracksFromMpuMetadata, found %u track%c", __LINE__, i_tracks, i_tracks ? 's':' ' );
 
-	if( CreateTracks( p_obj, i_tracks ) != VLC_SUCCESS )
+	if( CreateTracks( mmtp_sub_flow, i_tracks ) != VLC_SUCCESS )
 		goto error;
 
 	for( unsigned i = 0; i < mmtp_sub_flow->i_tracks; i++ ) {
@@ -1714,21 +1736,20 @@ static inline vlc_tick_t MP4_GetMoviePTS(demux_sys_t *p_sys )
 //}
 
 //create default empty/unconfigured tracks
-static int CreateTracks( demux_t *p_demux, unsigned i_tracks )
+static int CreateTracks( mmtp_sub_flow_t *mmtp_sub_flow, unsigned i_tracks )
 {
-    demux_sys_t *p_sys = p_demux->p_sys;
 
     if( SIZE_MAX / i_tracks < sizeof(mp4_track_t) )
         return VLC_EGENERIC;
 
-    p_sys->track = vlc_alloc( i_tracks, sizeof(mp4_track_t)  );
-    if( p_sys->track == NULL )
+    mmtp_sub_flow->track = vlc_alloc( i_tracks, sizeof(mp4_track_t)  );
+    if( mmtp_sub_flow->track == NULL )
         return VLC_ENOMEM;
-    p_sys->i_tracks = i_tracks;
+    mmtp_sub_flow->i_tracks = i_tracks;
 
     //set es format as UNKNOWN_ES
     for( unsigned i=0; i<i_tracks; i++ )
-        MP4_TrackInit( &p_sys->track[i] );
+        MP4_TrackInit( &mmtp_sub_flow->track[i] );
 
     return VLC_SUCCESS;
 }
