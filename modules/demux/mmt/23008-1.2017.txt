@@ -54,7 +54,7 @@ general format of MMT signalling messages:
 syntax							no. bits	mnemonic
 ------							--------	--------
 signalling_message() {	
-	message_id					16			uimbsf
+	message_id					16			uimbsf 		See 10.7 below
 	version						8			uimbsf
 	
 	if(message_id != PA_message && message_id != MPI_message)
@@ -238,8 +238,41 @@ MP_table() {
  		
  		
  
+Samples:
+ 
+MPT:
+
+signal message_id: 0x20
+
+
+
+
+0000   01 00 5e 7f 0a 02 00 1c 42 22 fa 9f 08 00 45 00   ..^.....B"ú...E.
+0010   00 8b b4 06 40 00 01 11 0a ae c0 a8 00 04 ef ff   ..´.@....®À¨..ïÿ
+0020   0a 02 90 8b c7 3a 00 77 f9 e9 61 02 00 00 c1 80   ....Ç:.wùéa...Á.
+0030   6b fc 00 07 33 17 02 06 c6 e2 9b ff 3c 01 00 20   kü..3...Æâ.ÿ<.. 
+0040   01 00 56 20 01 00 52 fc 05 44 53 42 2d 31 00 00   ..V ..Rü.DSB-1..
+0050   02 00 00 00 00 00 00 00 00 10 11 11 11 11 11 11   ................
+0060   11 11 11 11 11 11 11 11 11 11 68 65 76 31 fe 01   ..........hev1þ.
+0070   00 00 23 00 00 00 00 00 00 00 00 00 00 10 22 22   ..#...........""
+0080   22 22 22 22 22 22 22 22 22 22 22 22 22 22 6d 70   """"""""""""""mp
+0090   34 61 fe 01 00 00 24 00 00                        4aþ...$..
+ 
  
  
 
 
 < ISO/IEC 23008-1:2017 >
+
+
+notes:  ATSC 3.0 includes additional SI information -
+
+	signalling 
+	message_id		Content Type
+	-----------		------------
+	0x8100			USBD - XML BundleDescriptionMMT
+	
+	
+	
+	
+	
