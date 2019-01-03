@@ -541,8 +541,12 @@ int mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmt
 
 	demux_sys_t *p_sys = p_demux->p_sys;
 
+	//hack for joint parsing.....
+	p_sys->raw_buf = malloc( MAX_MMTP_SIZE );
+	p_sys->buf = p_sys->raw_buf; //use buf to walk thru bytes in extract method without touching rawBuf
+
 	uint8_t *raw_buf = p_sys->raw_buf;
-	uint8_t *buf = p_sys->buf; //use buf to walk thru bytes in extract method without touching rawBuf
+	uint8_t *buf = p_sys->buf;
 
 	block_ChainExtract(mmtp_packet->mmtp_packet_header.raw_packet, raw_buf, MAX_MMTP_SIZE);
 
@@ -662,6 +666,9 @@ int mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmt
 	mmtp_packet->mmtp_packet_header.packet_sequence_number	= mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
 	mmtp_packet->mmtp_packet_header.packet_counter 			= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
 
+
+	p_sys->raw_buf = raw_buf;
+	p_sys->buf =  buf;
 
 	return VLC_DEMUXER_SUCCESS;
 

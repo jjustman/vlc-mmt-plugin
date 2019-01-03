@@ -563,22 +563,26 @@ static int Demux( demux_t *p_demux )
     mmtp_raw_packet_size =  read_block->i_buffer;
 
    	if( mmtp_raw_packet_size > MAX_MMTP_SIZE || mmtp_raw_packet_size < MIN_MMTP_SIZE) {
-   		msg_Err( p_demux, "mmtp_demuxer - size from UDP was under/over heureis/max, dropping %d bytes", mmtp_raw_packet_size);
+   		msg_Err( p_demux, "%d:mmtp_demuxer - size from UDP was under/over heureis/max, dropping %d bytes", __LINE__, mmtp_raw_packet_size);
    		//   		free(raw_buf); //only free raw_buf
    		return VLC_DEMUXER_SUCCESS;
    	}
 
 
-	//hack for joint parsing.....
-	uint8_t *raw_buf = p_sys->raw_buf = malloc( MAX_MMTP_SIZE );
-	uint8_t *buf = p_sys->buf = p_sys->raw_buf; //use buf to walk thru bytes in extract method without touching rawBuf
 	mmtp_raw_packet_block = block_Duplicate(read_block);
 
 	mmtp_packet_header = mmtp_packet_header_allocate_from_raw_packet(mmtp_raw_packet_block);
 
+	int i_status = mmtp_packet_header_parse_from_raw_packet(mmtp_packet_header, p_demux);
+	if(i_status != VLC_DEMUXER_SUCCESS) {
+   		msg_Err( p_demux, "%d:mmtp_demuxer - mmtp_packet_header_parse_from_raw_packet failed, dropping packet");
 
-	mmtp_packet_header_parse_from_raw_packet(mmtp_packet_header, p_demux);
+   		return VLC_DEMUXER_SUCCESS;
+	}
 
+	//resync our buf positions
+	uint8_t *raw_buf = p_sys->raw_buf;
+	uint8_t *buf = p_sys->buf;
 
 	//create a sub_flow with this packet_id
 	msg_Info( p_demux, "%d:mmtp_demuxer - before mmtp_sub_flow_vector is: %p", __LINE__, mmtp_sub_flow_vector);
@@ -632,6 +636,16 @@ static int Demux( demux_t *p_demux )
 		mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_fragmentation_indicator = (mpu_fragmentation_info & 0x6) >> 1;
 		mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_aggregation_flag = (mpu_fragmentation_info & 0x1);
 
+		msg_Dbg( p_demux, "%d:mmtp_demuxer - mmtp packet: mpu_fragmentation_info is: 0x%x, mpu_fragment_type: 0x%x, mpu_timed_flag: 0x%x, mpu_fragmentation_indicator: 0x%x, mpu_aggregation_flag: 0x%x",
+					__LINE__,
+					mpu_fragmentation_info,
+					mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_fragment_type,
+					mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_timed_flag,
+					mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_fragmentation_indicator,
+					mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_aggregation_flag);
+
+
+
 		uint8_t mpu_fragmentation_counter;
 		//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
 		buf = extract(buf, &mpu_fragmentation_counter, 1);
@@ -639,11 +653,15 @@ static int Demux( demux_t *p_demux )
 		//re-fanagle
 		uint8_t mpu_sequence_number_block[4];
 		uint32_t mpu_sequence_number;
-		//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
 
 		buf = extract(buf, &mpu_sequence_number_block, 4);
 		mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_sequence_number = (mpu_sequence_number_block[0] << 24)  | (mpu_sequence_number_block[1] <<16) | (mpu_sequence_number_block[2] << 8) | (mpu_sequence_number_block[3]);
-		//msg_Dbg( p_demux, "mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1], mpu_fragmentation_counter, mpu_sequence_number);
+		msg_Dbg( p_demux, "mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",
+				mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_payload_length,
+				mpu_payload_length_block[0],
+				mpu_payload_length_block[1],
+				mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_fragmentation_counter,
+				mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_sequence_number);
 
 
 		mpu_fragments_assign_to_payload_vector(mmtp_sub_flow, mmtp_packet_header);
