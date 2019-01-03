@@ -53,6 +53,7 @@
 	uint8_t mmtp_type_of_bitrate;			\
 	uint8_t mmtp_delay_sensitivity;			\
 	uint8_t mmtp_transmission_priority;		\
+	uint8_t flow_label;						\
 	uint16_t mmtp_header_extension_type;	\
 	uint16_t mmtp_header_extension_length;	\
 	uint8_t *mmtp_header_extension_value;	\
@@ -566,9 +567,9 @@ int mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmt
 //		msg_Info(p_demux, "raw packet payload is:\n%s", buffer);
 //	}
 
-	uint8_t mmtp_packet_version = (mmtp_packet_preamble[0] & 0xC0) >> 6;
-	uint8_t packet_counter_flag = (mmtp_packet_preamble[0] & 0x20) >> 5;
-	uint8_t fec_type = (mmtp_packet_preamble[0] & 0x18) >> 3;
+	mmtp_packet->mmtp_packet_header.mmtp_packet_version = (mmtp_packet_preamble[0] & 0xC0) >> 6;
+	mmtp_packet->mmtp_packet_header.packet_counter_flag = (mmtp_packet_preamble[0] & 0x20) >> 5;
+	mmtp_packet->mmtp_packet_header.fec_type = (mmtp_packet_preamble[0] & 0x18) >> 3;
 
 	//v=0 vs v=1 attributes in the first 2 octets
 	uint8_t  mmtp_payload_type = 0;
@@ -589,79 +590,77 @@ int mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmt
 	uint16_t mmtp_header_extension_type = 0;
 	uint16_t mmtp_header_extension_length = 0;
 
-	uint8_t flow_label = 0;
-
-	if(mmtp_packet_version == 0x00) {
+	if(mmtp_packet->mmtp_packet_header.mmtp_packet_version == 0x00) {
 		//after fec_type, with v=0, next bitmask is 0x4 >>2
 		//0000 0010
 		//V0CF E-XR
-		mmtp_header_extension_flag = (mmtp_packet_preamble[0] & 0x2) >> 1;
-		mmtp_rap_flag = mmtp_packet_preamble[0] & 0x1;
+		mmtp_packet->mmtp_packet_header.mmtp_header_extension_flag = (mmtp_packet_preamble[0] & 0x2) >> 1;
+		mmtp_packet->mmtp_packet_header.mmtp_rap_flag = mmtp_packet_preamble[0] & 0x1;
 
 		//6 bits right aligned
-		mmtp_payload_type = mmtp_packet_preamble[1] & 0x3f;
-		if(mmtp_header_extension_flag & 0x1) {
-			mmtp_header_extension_type = (mmtp_packet_preamble[16]) << 8 | mmtp_packet_preamble[17];
-			mmtp_header_extension_length = (mmtp_packet_preamble[18]) << 8 | mmtp_packet_preamble[19];
+		mmtp_packet->mmtp_packet_header.mmtp_payload_type = mmtp_packet_preamble[1] & 0x3f;
+		if(mmtp_packet->mmtp_packet_header.mmtp_header_extension_flag & 0x1) {
+			mmtp_packet->mmtp_packet_header.mmtp_header_extension_type = (mmtp_packet_preamble[16]) << 8 | mmtp_packet_preamble[17];
+			mmtp_packet->mmtp_packet_header.mmtp_header_extension_length = (mmtp_packet_preamble[18]) << 8 | mmtp_packet_preamble[19];
 		} else {
 			//walk back by 4 bytes
 			buf-=4;
 		}
-	} else if(mmtp_packet_version == 0x01) {
+	} else if(mmtp_packet->mmtp_packet_header.mmtp_packet_version == 0x01) {
 		//bitmask is 0000 00
 		//0000 0100
 		//V1CF EXRQ
-		mmtp_header_extension_flag = mmtp_packet_preamble[0] & 0x4 >> 2; //X
-		mmtp_rap_flag = (mmtp_packet_preamble[0] & 0x2) >> 1;				//RAP
-		mmtp_qos_flag = mmtp_packet_preamble[0] & 0x1;					//QOS
+		mmtp_packet->mmtp_packet_header.mmtp_header_extension_flag = mmtp_packet_preamble[0] & 0x4 >> 2; //X
+		mmtp_packet->mmtp_packet_header.mmtp_rap_flag = (mmtp_packet_preamble[0] & 0x2) >> 1;				//RAP
+		mmtp_packet->mmtp_packet_header.mmtp_qos_flag = mmtp_packet_preamble[0] & 0x1;					//QOS
 		//0000 0000
 		//FEBI TYPE
 		//4 bits for preamble right aligned
 
-		mmtp_flow_identifer_flag = ((mmtp_packet_preamble[1]) & 0x80) >> 7;			//F
-		mmtp_flow_extension_flag = ((mmtp_packet_preamble[1]) & 0x40) >> 6;			//E
-		mmtp_header_compression = ((mmtp_packet_preamble[1]) &  0x20) >> 5; 		//B
-		mmtp_indicator_ref_header_flag = ((mmtp_packet_preamble[1]) & 0x10) >> 4;	//I
+		mmtp_packet->mmtp_packet_header.mmtp_flow_identifer_flag = ((mmtp_packet_preamble[1]) & 0x80) >> 7;			//F
+		mmtp_packet->mmtp_packet_header.mmtp_flow_extension_flag = ((mmtp_packet_preamble[1]) & 0x40) >> 6;			//E
+		mmtp_packet->mmtp_packet_header.mmtp_header_compression = ((mmtp_packet_preamble[1]) &  0x20) >> 5; 		//B
+		mmtp_packet->mmtp_packet_header.mmtp_indicator_ref_header_flag = ((mmtp_packet_preamble[1]) & 0x10) >> 4;	//I
 
-		mmtp_payload_type = mmtp_packet_preamble[1] & 0xF;
+		mmtp_packet->mmtp_packet_header.mmtp_payload_type = mmtp_packet_preamble[1] & 0xF;
 
 		//TB 2 bits
-		mmtp_type_of_bitrate = ((mmtp_packet_preamble[16] & 0x40) >> 6) | ((mmtp_packet_preamble[16] & 0x20) >> 5);
+		mmtp_packet->mmtp_packet_header.mmtp_type_of_bitrate = ((mmtp_packet_preamble[16] & 0x40) >> 6) | ((mmtp_packet_preamble[16] & 0x20) >> 5);
 
 		//DS 3 bits
-		mmtp_delay_sensitivity = ((mmtp_packet_preamble[16] & 0x10) >> 4) | ((mmtp_packet_preamble[16] & 0x8) >> 3) | ((mmtp_packet_preamble[16] & 0x4) >> 2);
+		mmtp_packet->mmtp_packet_header.mmtp_delay_sensitivity = ((mmtp_packet_preamble[16] & 0x10) >> 4) | ((mmtp_packet_preamble[16] & 0x8) >> 3) | ((mmtp_packet_preamble[16] & 0x4) >> 2);
 
 		//TP 3 bits
-		mmtp_transmission_priority =(( mmtp_packet_preamble[16] & 0x02) << 2) | ((mmtp_packet_preamble[16] & 0x1) << 1) | ((mmtp_packet_preamble[17] & 0x80) >>7);
+		mmtp_packet->mmtp_packet_header.mmtp_transmission_priority =(( mmtp_packet_preamble[16] & 0x02) << 2) | ((mmtp_packet_preamble[16] & 0x1) << 1) | ((mmtp_packet_preamble[17] & 0x80) >>7);
 
-		flow_label = mmtp_packet_preamble[17] & 0x7f;
+		mmtp_packet->mmtp_packet_header.flow_label = mmtp_packet_preamble[17] & 0x7f;
 
 		//header extension is offset by 2 bytes in v=1, so an additional block chain read is needed to get extension length
-		if(mmtp_header_extension_flag & 0x1) {
-			mmtp_header_extension_type = (mmtp_packet_preamble[18] << 8) | mmtp_packet_preamble[19];
+		if(mmtp_packet->mmtp_packet_header.mmtp_header_extension_flag & 0x1) {
+			mmtp_packet->mmtp_packet_header.mmtp_header_extension_type = (mmtp_packet_preamble[18] << 8) | mmtp_packet_preamble[19];
 
 	//		msg_Warn( p_demux, "mmtp_demuxer - dping mmtp_header_extension_length_bytes: %d",  mmtp_header_extension_type);
 
 			uint8_t mmtp_header_extension_length_bytes[2];
 			buf = extract(buf, mmtp_header_extension_length_bytes, 2);
 
-			mmtp_header_extension_length = mmtp_header_extension_length_bytes[0] << 8 | mmtp_header_extension_length_bytes[1];
+			mmtp_packet->mmtp_packet_header.mmtp_header_extension_length = mmtp_header_extension_length_bytes[0] << 8 | mmtp_header_extension_length_bytes[1];
 		} else {
 			//walk back our buf position by 2 bytes to start for payload ddata
 			buf-=2;
 
 		}
 	} else {
-		msg_Warn( p_demux, "mmtp_demuxer - unknown packet version of 0x%X", mmtp_packet_version);
+		msg_Warn( p_demux, "mmtp_demuxer - unknown packet version of 0x%X", mmtp_packet->mmtp_packet_header.mmtp_packet_version);
 		goto error;
 	//	free( raw_buf );
 
 	}
 
-	uint16_t mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
-	uint32_t mmtp_timestamp 		= mmtp_packet_preamble[4]  << 24 | mmtp_packet_preamble[5]  << 16 | mmtp_packet_preamble[6]   << 8 | mmtp_packet_preamble[7];
-	uint32_t packet_sequence_number = mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
-	uint32_t packet_counter 		= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
+	mmtp_packet->mmtp_packet_header.mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
+	mmtp_packet->mmtp_packet_header.mmtp_timestamp 			= mmtp_packet_preamble[4]  << 24 | mmtp_packet_preamble[5]  << 16 | mmtp_packet_preamble[6]   << 8 | mmtp_packet_preamble[7];
+	mmtp_packet->mmtp_packet_header.packet_sequence_number	= mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
+	mmtp_packet->mmtp_packet_header.packet_counter 			= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
 
 
 	return VLC_DEMUXER_SUCCESS;

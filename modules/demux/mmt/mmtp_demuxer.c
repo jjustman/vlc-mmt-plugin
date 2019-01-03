@@ -560,7 +560,7 @@ static int Demux( demux_t *p_demux )
 	}
 
     msg_Info(p_demux, "mmtp_demuxer: vlc_stream_readblock size is: %d", read_block->i_buffer);
-     mmtp_raw_packet_size =  read_block->i_buffer;
+    mmtp_raw_packet_size =  read_block->i_buffer;
 
    	if( mmtp_raw_packet_size > MAX_MMTP_SIZE || mmtp_raw_packet_size < MIN_MMTP_SIZE) {
    		msg_Err( p_demux, "mmtp_demuxer - size from UDP was under/over heureis/max, dropping %d bytes", mmtp_raw_packet_size);
