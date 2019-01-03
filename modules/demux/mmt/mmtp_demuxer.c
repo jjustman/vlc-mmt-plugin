@@ -80,6 +80,8 @@ sudo route -nv add -net 224.0.0.0/4 -interface vnic1
 #include <vlc_plugin.h>
 #include <vlc_dialog.h>
 #include <vlc_url.h>
+#include <vlc_vector.h>
+
 #include <assert.h>
 #include <limits.h>
 #include "../codec/cc.h"
@@ -101,7 +103,7 @@ static int  Open( vlc_object_t * );
 static void Close ( vlc_object_t * );
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
-#define uS 1000000
+#define uS 1000000ULL
 
 #define DEMUX_INCREMENT VLC_TICK_FROM_MS(250) /* How far the pcr will go, each round */
 #define DEMUX_TRACK_MAX_PRELOAD VLC_TICK_FROM_SEC(15) /* maximum preloading, to deal with interleaving */
@@ -264,7 +266,99 @@ typedef struct
     //todo -put this in a map
     block_t *mpu_metadata_block;
 
+   // vlc_dictionary_t packet_id_dict;
+    //    vlc_dictionary_init( &p_node->attr_dict, 0 );
+
+
 } demux_sys_t;
+
+//forward declare for pointer/vector management
+struct mmtp_sub_flow_t;
+
+/**
+ * typedef struct Base
+{
+    // base members
+} Base_t;
+
+typedef struct
+{
+   struct Base;  //anonymous struct
+
+   // derived members
+
+} Derived_t;
+ */
+/**
+ *
+ * these sizes aren't bit-aligned to the 23008-1 spec, but they are right-shifted to LSB values
+ *
+ */
+
+typedef struct mmtp_mpu_type_header {
+	uint16_t mpu_payload_length;
+	uint8_t mpu_fragment_type;
+	uint8_t mpu_timed_flag;
+	uint8_t mpu_fragmentation_counter;
+
+};
+
+typedef struct {
+
+} mpu_data_unit_payload_fragments_timed_t;
+
+typedef struct {
+
+} mpu_data_unit_payload_fragments_nontimed_t;
+
+
+typedef struct {
+	mpu_data_unit_payload_fragments_timed_t timed_fragments_vector;
+	mpu_data_unit_payload_fragments_nontimed_t nontimed_fragments_vector;
+
+} mpu_data_unit_payload_fragments_t;
+
+typedef struct {
+	struct mmtp_sub_flow_t *mmtp_sub_flow;
+	uint32_t mpu_sequence_number;
+
+	//MPU Fragment type collections for reconstruction/recovery of fragments
+
+	//MPU metadata, mpu_fragment_type==0x00
+	mpu_data_unit_payload_fragments_t mpu_metadata_fragments_vector;
+
+	//Movie fragment metadata, mpu_fragment_type==0x01
+	mpu_data_unit_payload_fragments_t mpu_movie_fragment_metadata_vector;
+
+	//MPU (media fragment_unit), mpu_fragment_type==0x02
+	mpu_data_unit_payload_fragments_t media_fragment_unit_vector;
+
+
+} mpu_fragments_t;
+
+
+typedef struct VLC_VECTOR(struct mpu_fragments_t *) mpu_fragments_vector_t;
+
+typedef struct  {
+	uint16_t packet_id;
+
+	//mmtp payload type collections for reconstruction/recovery of payload types
+
+	//mpu (media_processing_unit):	paylod_type==0x00
+	mpu_fragments_vector_t mpu_fragments_vector;
+
+	//generic object:				payload_type==0x01
+	generic_object_fragments_vector_t generic_object_fragments_vector;
+
+	//signalling message: 			payload_type=0x02
+	signalling_message_fragments_vector_t signalling_message_fragements_vector;
+
+	//repair symbol:				payload_type==0x03
+	repair_symbol_vector_t repair_symbol_vector;
+
+} mmtp_sub_flow_t;
+
+typedef struct VLC_VECTOR(struct mmtp_sub_flow_t *) mmtp_sub_flow_vector;
 
 
 
@@ -579,6 +673,8 @@ static int Open( vlc_object_t * p_this )
     p_sys->last_mpu_fragment_type = -1;
     p_sys->has_processed_ftype_moov = 0;
 
+    //dictionary lookups for packet_id, mpu_se
+
     msg_Info(p_demux, "mmtp_demuxer.open() - complete");
 
     return VLC_SUCCESS;
@@ -813,7 +909,7 @@ static int Demux( demux_t *p_demux )
 	uint32_t packet_counter 		= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
 
 
-	if(mmtp_packet_id != 35) {
+	if(mmtp_packet_id != 36) {
 		//	msg_Info(p_demux, "processMpuPacket - returning because mmtp_packet_id!=35, val is %hu", mmtp_packet_id);
 		return VLC_DEMUXER_SUCCESS;
 	}
@@ -1132,7 +1228,7 @@ void createTracksFromMpuMetadata(demux_t* p_demux) {
 	    		(p_trak->i_handler >>24)&0xFF ,
 				(p_trak->i_handler >>16)&0xFF,
 				(p_trak->i_handler >>8)&0xFF,
-				(p_trak->i_handler   )&0xFF);
+				(p_trak->i_handler    )&0xFF);
 
 	    if(i>0)
 	    	continue;
@@ -1307,13 +1403,13 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
         	timespec_get(&ts, TIME_UTC);
 
         	//convert to microseconds
-            uint64_t t = ((ts.tv_sec) * 1000000ULL) + ((ts.tv_nsec) / 1000ULL) ; // convert tv_sec & tv_usec to millisecond
+            uint64_t t = ((ts.tv_sec) * uS) + ((ts.tv_nsec) / 1000ULL) ; // convert tv_sec & tv_usec to millisecond
 
         	es_out_SetPCR( p_demux->out, t );
 
         	//TODO - use traf/tfdt for actual sample decoding time based upon mvhd.timescale (p_sys->i_timescale)
         	//for now, use the rational 1001 * uS / 60000 * uS ~ 16000us
-        	uint64_t manual_pts_calculation = 1000000 + t + ((1001 * uS) / (60000 *uS));
+        	uint64_t manual_pts_calculation = 2 * uS + t + ((1001ULL * uS) / (60000ULL *uS));
         	tmp_mpu_fragment->i_pts = manual_pts_calculation;
 
 			if(mpu_fragmentation_indicator == 0x00) {
