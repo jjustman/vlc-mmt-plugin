@@ -70,9 +70,12 @@ sudo route -nv add -net 224.0.0.0/4 -interface vnic1
 # include "config.h"
 #endif
 
-/** cascasde libmp4 headers here ***/
-#include "mp4.h"
 
+#include "mmtp_types.h"
+
+/** cascasde libmp4 headers here ***/
+
+#include "mp4.h"
 #include <vlc_demux.h>
 #include <vlc_charset.h>                           /* EnsureUTF8 */
 #include <vlc_input.h>
@@ -190,7 +193,6 @@ vlc_module_end ()
 
 
 
-typedef struct VLC_VECTOR(struct mmtp_sub_flow_t *) mmtp_sub_flow_vector_t;
 
 typedef struct
 {
@@ -271,177 +273,16 @@ typedef struct
 
 } demux_sys_t;
 
-//forward declare for pointer/vector management
-struct mmtp_sub_flow_t;
-
-/**
- * typedef struct Base
-{
-    // base members
-} Base_t;
-
-typedef struct
-{
-   struct Base;  //anonymous struct
-
-   // derived members
-
-} Derived_t;
- */
-/**
- *
- * these sizes aren't bit-aligned to the 23008-1 spec, but they are right-shifted to LSB values
- *
- */
-
-/**
- * base mmtp_packet_header fields
- *
- * clang doesn't know how to inherit from structs, e.g. -fms-extensions, so use a define instead
- * see https://stackoverflow.com/questions/1114349/struct-inheritance-in-c
- *
- * typedef struct mmtp_packet_header {
- *
- * todo, ptr back to chain to mmtp_packet_id
- */
-
-#define _MMTP_PACKET_HEADER_FIELDS 			\
-	uint8_t mmtp_packet_version; 			\
-	uint8_t packet_counter_flag; 			\
-	uint8_t fec_type; 						\
-	uint8_t mmtp_payload_type;				\
-	uint8_t mmtp_header_extension_flag;		\
-	uint8_t mmtp_rap_flag;					\
-	uint8_t mmtp_qos_flag;					\
-	uint8_t mmtp_flow_identifer_flag;		\
-	uint8_t mmtp_flow_extension_flag;		\
-	uint8_t mmtp_header_compression;		\
-	uint8_t	mmtp_indicator_ref_header_flag;	\
-	uint8_t mmtp_type_of_bitrate;			\
-	uint8_t mmtp_delay_sensitivity;			\
-	uint8_t mmtp_transmission_priority;		\
-	uint16_t mmtp_header_extension_type;	\
-	uint16_t mmtp_header_extension_length;	\
-	uint16_t mmtp_packet_id; 				\
-	uint32_t mmtp_timestamp;				\
-	uint32_t packet_sequence_number;		\
-	uint32_t packet_counter;				\
-	block_t *raw_packet;					\
 
 
-//define for mpu type common header fields for struct inheritance
-//todo: add in MMTHSample box
-
-#define _MMTP_MPU_TYPE_HEADER_FIELDS 		\
-	_MMTP_PACKET_HEADER_FIELDS;				\
-	uint16_t mpu_payload_length;			\
-	uint8_t mpu_fragment_type;				\
-	uint8_t mpu_timed_flag;					\
-	uint8_t mpu_fragmentation_indicator;	\
-	uint8_t mpu_aggregation_flag;			\
-	uint8_t mpu_fragmentation_counter;		\
-	block_t *mpu_data_unit_payload;			\
-
-typedef struct {
-	_MMTP_MPU_TYPE_HEADER_FIELDS;
-	uint32_t movie_fragment_sequence_number;
-	uint32_t sample_number;
-	uint32_t offset;
-	uint8_t priority;
-	uint8_t dep_counter;
-
-} mpu_data_unit_payload_fragments_timed_t;
-
-typedef struct {
-	_MMTP_MPU_TYPE_HEADER_FIELDS;
-
-	uint32_t non_timed_mfu_item_id;
-
-} mpu_data_unit_payload_fragments_nontimed_t;
-
-typedef struct VLC_VECTOR(struct mpu_data_unit_payload_fragments_timed_t *) 	mpu_data_unit_payload_fragments_timed_vector_t;
-typedef struct VLC_VECTOR(struct mpu_data_unit_payload_fragments_nontimed_t *)	mpu_data_unit_payload_fragments_nontimed_vector_t;
-
-typedef struct {
-	mpu_data_unit_payload_fragments_timed_vector_t 		timed_fragments_vector;
-	mpu_data_unit_payload_fragments_nontimed_vector_t 	nontimed_fragments_vector;
-
-} mpu_data_unit_payload_fragments_t;
-
-typedef struct VLC_VECTOR(struct mpu_data_unit_payload_fragments_t *) mpu_data_unit_payload_fragments_vector_t;
-
-typedef struct {
-	struct mmtp_sub_flow_t *mmtp_sub_flow;
-	uint32_t mpu_sequence_number;
-
-	//MPU Fragment type collections for reconstruction/recovery of fragments
-
-	//MPU metadata, 							mpu_fragment_type==0x00
-	mpu_data_unit_payload_fragments_vector_t 	mpu_metadata_fragments_vector;
-
-	//Movie fragment metadata, 					mpu_fragment_type==0x01
-	mpu_data_unit_payload_fragments_vector_t	mpu_movie_fragment_metadata_vector;
-
-	//MPU (media fragment_unit),				mpu_fragment_type==0x02
-	mpu_data_unit_payload_fragments_vector_t	media_fragment_unit_vector;
-
-
-} mpu_fragments_t;
-
-/**
- * todo:  impl's
- */
-
-typedef struct {
-	_MMTP_PACKET_HEADER_FIELDS;
-
-} generic_object_fragments_t;
-
-typedef struct {
-	_MMTP_PACKET_HEADER_FIELDS;
-
-} signalling_message_fragments_t;
-
-typedef struct {
-	_MMTP_PACKET_HEADER_FIELDS;
-
-} repair_symbol_t;
-
-typedef struct VLC_VECTOR(struct mpu_fragments_t *) 				mpu_fragments_vector_t;
-typedef struct VLC_VECTOR(struct generic_object_fragments_t *) 		generic_object_fragments_vector_t;
-typedef struct VLC_VECTOR(struct signalling_message_fragments_t *) 	signalling_message_fragments_vector_t;
-typedef struct VLC_VECTOR(struct repair_symbol_t *) 				repair_symbol_vector_t;
-
-typedef struct  {
-	uint16_t packet_id;
-
-	//mmtp payload type collections for reconstruction/recovery of payload types
-
-	//mpu (media_processing_unit):			paylod_type==0x00
-	mpu_fragments_vector_t 					mpu_fragments_vector;
-
-	//generic object:						payload_type==0x01
-	generic_object_fragments_vector_t 		eneric_object_fragments_vector;
-
-	//signalling message: 					payload_type=0x02
-	signalling_message_fragments_vector_t 	signalling_message_fragements_vector;
-
-	//repair symbol:						payload_type==0x03
-	repair_symbol_vector_t 					repair_symbol_vector;
-
-} mmtp_sub_flow_t;
 
 
 
 
 static int   Demux   ( demux_t * );
-static int   DemuxRef( demux_t *p_demux ){ (void)p_demux; return 0;}
 static int   DemuxFrag( demux_t * );
 static int   Control ( demux_t *, int, va_list );
 
-
-//old sig -
-//void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment );
 void   processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_sequence_number, uint32_t sample_number, uint32_t mpu_offset, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment );
 
 
@@ -698,7 +539,6 @@ typedef struct  {
 /*
  * Initializes the MMTP demuxer
  *
- * 	TODO: chain to MPU sub-demuxer when MPT.payload_type_id=0x00
  *
  * 	read the first 32 bits to parse out version, packet_type and packet_id
  * 		if we think this is an MMPT packet, then wire up Demux and Control callbacks
@@ -739,7 +579,7 @@ static int Open( vlc_object_t * p_this )
     p_sys->last_mpu_fragment_type = -1;
     p_sys->has_processed_ftype_moov = 0;
 
-    //dictionary lookups for packet_id, mpu_se
+    mmtp_sub_flow_vector_init(&p_sys->mmtp_sub_flow_vector);
 
     msg_Info(p_demux, "mmtp_demuxer.open() - complete");
 
@@ -844,6 +684,10 @@ static int Demux( demux_t *p_demux )
 		msg_Err( p_demux, "mmtp_demuxer - access request returned null!");
 		return VLC_DEMUXER_SUCCESS;
 	}
+
+    //refactoring
+    block_t *mmtp_packet_raw_block_t = block_Duplicate(read_block);
+
 
     mmtp_raw_packet_size =  read_block->i_buffer;
    // msg_Info(p_demux, "mmtp_demuxer: vlc_stream_readblock size is: %d", read_block->i_buffer);
@@ -974,14 +818,15 @@ static int Demux( demux_t *p_demux )
 	uint32_t packet_sequence_number = mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
 	uint32_t packet_counter 		= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
 
+	//create a sub_flow with this packet_id
+	mmtp_sub_flow_t *mmtp_sub_flow = mmtp_sub_flow_vector_get_or_set_packet_id(&p_sys->mmtp_sub_flow_vector, mmtp_packet_id);
 
-	if(mmtp_packet_id != 36) {
-		//	msg_Info(p_demux, "processMpuPacket - returning because mmtp_packet_id!=35, val is %hu", mmtp_packet_id);
-		return VLC_DEMUXER_SUCCESS;
-	}
+	//create an mmtp_pcaket (cast as mmtp_packet_header_fields_t) but instanitated based upon mpu_payload_type
+	mmtp_packet_header_fields_t *mmtp_packet_header = mmtp_packet_create(raw_buf, mmtp_packet_version, mmtp_payload_type, mmtp_packet_id, packet_sequence_number, packet_counter, mmtp_timestamp);
 
-//	msg_Dbg( p_demux, "packet version: %d, payload_type: 0x%X, packet_id 0x%hu, timestamp: 0x%X, packet_sequence_number: 0x%X, packet_counter: 0x%X", mmtp_packet_version,
-//			mmtp_payload_type, mmtp_packet_id, mmtp_timestamp, packet_sequence_number, packet_counter);
+	//push this to the proper fragment container, continue parsing below
+	mmtp_sub_flow_vector_push_mmtp_packet(mmtp_sub_flow, mmtp_packet_header);
+
 
 	//if our header extension length is set, then block extract the header extension length, adn we should be at our payload data
 	uint8_t *mmtp_header_extension_value = NULL;
@@ -999,12 +844,14 @@ static int Demux( demux_t *p_demux )
 	}
 
 	if(mmtp_payload_type == 0) {
+		//VECTOR:  TODO - refactor this into helper method
+
 		//pull the mpu and frag iformation
 
 		uint8_t mpu_payload_length_block[2];
 		uint16_t mpu_payload_length = 0;
 
-//			msg_Warn( p_demux, "buf pos before mpu_payload_length extract is: %p", (void *)buf);
+		//msg_Warn( p_demux, "buf pos before mpu_payload_length extract is: %p", (void *)buf);
 		buf = extract(buf, &mpu_payload_length_block, 2);
 		mpu_payload_length = (mpu_payload_length_block[0] << 8) | mpu_payload_length_block[1];
 		//msg_Dbg( p_demux, "mmtp_demuxer - doing mpu_payload_length: %hu (0x%X 0x%X)",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1]);
@@ -1019,17 +866,29 @@ static int Demux( demux_t *p_demux )
 		uint8_t mpu_aggregation_flag = (mpu_fragmentation_info & 0x1);
 
 		uint8_t mpu_fragmentation_counter;
-//			msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
+		//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
 		buf = extract(buf, &mpu_fragmentation_counter, 1);
 
 		//re-fanagle
 		uint8_t mpu_sequence_number_block[4];
 		uint32_t mpu_sequence_number;
-//			msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
+		//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
 
 		buf = extract(buf, &mpu_sequence_number_block, 4);
 		mpu_sequence_number = (mpu_sequence_number_block[0] << 24)  | (mpu_sequence_number_block[1] <<16) | (mpu_sequence_number_block[2] << 8) | (mpu_sequence_number_block[3]);
-	//	msg_Dbg( p_demux, "mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1], mpu_fragmentation_counter, mpu_sequence_number);
+		//msg_Dbg( p_demux, "mmtp_demuxer - mmtp packet: mpu_payload_length: %hu (0x%X 0x%X), mpu_fragmentation_counter: %d, mpu_sequence_number: %d",  mpu_payload_length, mpu_payload_length_block[0], mpu_payload_length_block[1], mpu_fragmentation_counter, mpu_sequence_number);
+
+
+		//VECTOR: update and re-assign our mmtp_packet_header object into mmtp_mpu_type_packet_header_fields_t
+		mmtp_mpu_type_packet_header_fields_t *mpu_type_packet = (mmtp_mpu_type_packet_header_fields_t*)mmtp_packet_header;
+		mpu_type_packet->mpu_payload_length = mpu_payload_length;
+		mpu_type_packet->mpu_fragment_type = mpu_fragment_type;
+		mpu_type_packet->mpu_timed_flag = mpu_timed_flag;
+		mpu_type_packet->mpu_fragmentation_indicator = mpu_fragmentation_indicator;
+		mpu_type_packet->mpu_aggregation_flag = mpu_aggregation_flag;
+		mpu_type_packet->mpu_fragmentation_counter = mpu_fragmentation_counter;
+		mpu_type_packet->mpu_sequence_number = mpu_sequence_number;
+
 
 		uint16_t data_unit_length = 0;
 		int remainingPacketLen = -1;
