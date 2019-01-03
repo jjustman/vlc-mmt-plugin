@@ -1218,6 +1218,19 @@ void createTracksFromMpuMetadata(demux_t* p_demux) {
 		return;
 }
 
+/**
+ * ala java multiKeyMap
+ * map of <mmtp_packet_id, mpu_sequence_number, mpu_samples>
+ * mpu_samples {
+ * 	mpu_metadata - contains ftyp/mmpu/moov/meta boxes for <packet_id> key
+ * 	movie_fragment_metadata - contains moof/mdat boxes for <packet_id, mpu_sequence_number> mfu's
+ * 	mfu - media_fragment_unit
+ *
+ * 	first_mfu_fragment
+ *  list<mfu>
+ * 	last_fragment
+ *
+ */
 
 
 void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_sequence_number, uint32_t mpu_sample_number, uint32_t mpu_offset, uint8_t mpu_fragment_type, uint8_t mpu_fragmentation_indicator, block_t *tmp_mpu_fragment ) {
@@ -1294,6 +1307,8 @@ void processMpuPacket(demux_t* p_demux, uint16_t mmtp_packet_id, uint32_t mpu_se
             uint64_t t = 1000000 + ((ts.tv_sec) * 1000000ULL) + ((ts.tv_nsec) / 1000ULL) ; // convert tv_sec & tv_usec to millisecond
 
         	es_out_SetPCR( p_demux->out, t );
+
+        	//TODO - use traf/tfdt for actual sample decoding time
         	tmp_mpu_fragment->i_pts = t + 16000;
 
 			if(mpu_fragmentation_indicator == 0x00) {
