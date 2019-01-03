@@ -3480,9 +3480,9 @@ static void MP4_TrackSetup( demux_t *p_demux, mmtp_sub_flow_t* mmtp_sub_flow, mp
         {
             msg_Dbg( p_demux, "   - [%d] duration=%"PRId64"ms media time=%"PRId64
                      "ms) rate=%d.%d", i,
-                     MP4_rescale( elst->i_segment_duration[i], p_sys->i_timescale, 1000 ),
+                     MP4_rescale( elst->i_segment_duration[i], mmtp_sub_flow->i_timescale, 1000 ),
                      elst->i_media_time[i] >= 0 ?
-                        MP4_rescale( elst->i_media_time[i], p_track->i_timescale, 1000 ) :
+                        MP4_rescale( elst->i_media_time[i], mmtp_sub_flow->i_timescale, 1000 ) :
                         INT64_C(-1),
                      elst->i_media_rate_integer[i],
                      elst->i_media_rate_fraction[i] );
@@ -3537,23 +3537,23 @@ static void MP4_TrackSetup( demux_t *p_demux, mmtp_sub_flow_t* mmtp_sub_flow, mp
     p_track->i_chunk  = 0;
     p_track->i_sample = 0;
 
-    /* Mark chapter only track */
-    if( p_sys->p_tref_chap )
-    {
-        MP4_Box_data_tref_generic_t *p_chap = p_sys->p_tref_chap->data.p_tref_generic;
-        unsigned int i;
-
-        for( i = 0; i < p_chap->i_entry_count; i++ )
-        {
-            if( p_track->i_track_ID == p_chap->i_track_ID[i] &&
-                p_track->fmt.i_cat == UNKNOWN_ES )
-            {
-                p_track->b_chapters_source = true;
-                p_track->b_enable = false;
-                break;
-            }
-        }
-    }
+//    /* Mark chapter only track */
+//    if(mmtp_sub_flow->p_tref_chap )
+//    {
+//        MP4_Box_data_tref_generic_t *p_chap = mmtp_sub_flow->p_tref_chap->data.p_tref_generic;
+//        unsigned int i;
+//
+//        for( i = 0; i < p_chap->i_entry_count; i++ )
+//        {
+//            if( p_track->i_track_ID == p_chap->i_track_ID[i] &&
+//                p_track->fmt.i_cat == UNKNOWN_ES )
+//            {
+//                p_track->b_chapters_source = true;
+//                p_track->b_enable = false;
+//                break;
+//            }
+//        }
+//    }
 
     const MP4_Box_t *p_tsel;
     /* now create es */
@@ -3572,9 +3572,9 @@ static void MP4_TrackSetup( demux_t *p_demux, mmtp_sub_flow_t* mmtp_sub_flow, mp
         {
             p_track->i_switch_group = BOXDATA(p_tsel)->i_switch_group;
             int i_priority = ES_PRIORITY_SELECTABLE_MIN;
-            for ( unsigned int i = 0; i < p_sys->i_tracks; i++ )
+            for ( unsigned int i = 0; i < mmtp_sub_flow->i_tracks; i++ )
             {
-                const mp4_track_t *p_other = &p_sys->track[i];
+                const mp4_track_t *p_other = &mmtp_sub_flow->track[i];
                 if( p_other && p_other != p_track &&
                     p_other->fmt.i_cat == p_track->fmt.i_cat &&
                     p_track->i_switch_group == p_other->i_switch_group )
@@ -3606,10 +3606,10 @@ static void MP4_TrackSetup( demux_t *p_demux, mmtp_sub_flow_t* mmtp_sub_flow, mp
         }
     }
 
-    if( p_sys->hacks.es_cat_filters && (p_sys->hacks.es_cat_filters & p_track->fmt.i_cat) == 0 )
-    {
-        p_track->fmt.i_priority = ES_PRIORITY_NOT_DEFAULTABLE;
-    }
+//    if( mmtp_sub_flow->hacks.es_cat_filters && (mmtp_sub_flow->hacks.es_cat_filters & p_track->fmt.i_cat) == 0 )
+//    {
+//        p_track->fmt.i_priority = ES_PRIORITY_NOT_DEFAULTABLE;
+//    }
 
     if( !p_track->b_enable )
         p_track->fmt.i_priority = ES_PRIORITY_NOT_DEFAULTABLE;

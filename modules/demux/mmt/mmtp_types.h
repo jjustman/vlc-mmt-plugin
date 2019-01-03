@@ -227,7 +227,7 @@ typedef struct  {
 } mmtp_sub_flow_t;
 
 
-typedef struct VLC_VECTOR(mmtp_sub_flow_t *) mmtp_sub_flow_vector_t;
+typedef struct VLC_VECTOR(mmtp_sub_flow_t*) mmtp_sub_flow_vector_t;
 
 
 void mmtp_sub_flow_vector_init(mmtp_sub_flow_vector_t *mmtp_sub_flow_vector) {
@@ -323,7 +323,7 @@ void mpu_fragments_assign_to_payload_vector(mmtp_sub_flow_t *mmtp_sub_flow, mmtp
 //	mmtp_sub_flow_t mmtp_sub_flow = mpu_type_packet->mpu_
 
 	mpu_fragments_t *mpu_fragments = mmtp_sub_flow->mpu_fragments;
-	printf("%d:mpu_fragments_assign_to_payload_vector - mpu_fragments is: %p", __LINE__, mpu_fragments);
+	printf("%d:mpu_fragments_assign_to_payload_vector - mpu_fragments is: %p\n", __LINE__, mpu_fragments);
 
 	if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type == 0x00) {
 		//push to mpu_metadata fragments vector
@@ -427,7 +427,7 @@ mmtp_payload_fragments_union_t* mmtp_packet_create(block_t * raw_packet,
 void mmtp_sub_flow_push_mmtp_packet(mmtp_sub_flow_t *mmtp_sub_flow, mmtp_payload_fragments_union_t *mmtp_packet) {
 	mmtp_packet->mmtp_packet_header.mmtp_sub_flow = mmtp_sub_flow;
 
-	printf("%d:mmtp_sub_flow_push_mmtp_packet, mmtp_payload_type: 0x%x", __LINE__, mmtp_packet->mmtp_packet_header.mmtp_payload_type);
+	printf("%d:mmtp_sub_flow_push_mmtp_packet, mmtp_payload_type: 0x%x\n", __LINE__, mmtp_packet->mmtp_packet_header.mmtp_payload_type);
 	if(mmtp_packet->mmtp_packet_header.mmtp_payload_type == 0x00) {
 		//(mmtp_mpu_type_packet_header_fields_t*
 		//defer, we don;'t know enough about the type
@@ -525,7 +525,7 @@ typedef struct
     sig_atomic_t last_mpu_fragment_type;
 
 
-    mmtp_sub_flow_vector_t *mmtp_sub_flow_vector;
+    mmtp_sub_flow_vector_t mmtp_sub_flow_vector;
 
 } demux_sys_t;
 
