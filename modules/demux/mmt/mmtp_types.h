@@ -104,6 +104,7 @@ typedef struct VLC_VECTOR(struct mpu_data_unit_payload_fragments_nontimed_t *)	m
 
 //todo, make this union
 typedef struct {
+	uint32_t mpu_sequence_number;
 	mpu_data_unit_payload_fragments_timed_vector_t 		timed_fragments_vector;
 	mpu_data_unit_payload_fragments_nontimed_vector_t 	nontimed_fragments_vector;
 
@@ -112,7 +113,7 @@ typedef struct {
 typedef struct VLC_VECTOR(struct mpu_data_unit_payload_fragments_t *) mpu_data_unit_payload_fragments_vector_t;
 
 typedef struct {
-	//struct mmtp_sub_flow_t *mmtp_sub_flow;
+	struct mmtp_sub_flow_t *mmtp_sub_flow;
 	uint16_t mmtp_packet_id;
 
 
@@ -203,6 +204,36 @@ vlc_player_program_vector_FindById(vlc_player_program_vector *vec, int id,
 
 
 
+mpu_data_unit_payload_fragments_t* mpu_data_unit_payload_fragments_find_mpu_sequence_number(mpu_data_unit_payload_fragments_vector_t *vec, uint32_t mpu_sequence_number) {
+	for (size_t i = 0; i < vec->size; ++i) {
+		mpu_data_unit_payload_fragments_t *mpu_fragments = vec->data[i];
+
+		if (mpu_fragments->mpu_sequence_number == mpu_sequence_number) {
+			return vec->data[i];
+		}
+	}
+	return NULL;
+}
+
+
+mpu_fragments_t* mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(mpu_data_unit_payload_fragments_vector_t *vec, mmtp_mpu_type_packet_header_fields_t *mpu_type_packet) {
+
+	mpu_data_unit_payload_fragments_t *entry = mpu_data_unit_payload_fragments_find_mpu_sequence_number(vec, mpu_type_packet->mpu_sequence_number);
+	if(!entry) {
+		entry = malloc(sizeof(mpu_data_unit_payload_fragments_t));
+		entry->mpu_sequence_number = mpu_type_packet->mpu_sequence_number;
+		vlc_vector_init(&entry->timed_fragments_vector);
+		vlc_vector_init(&entry->nontimed_fragments_vector);
+		if(mpu_type_packet->mpu_timed_flag) {
+			vlc_vector_push(&entry->timed_fragments_vector, entry);
+		} else {
+			vlc_vector_push(&entry->nontimed_fragments_vector, entry);
+		}
+	}
+
+	return entry;
+}
+
 
 mpu_fragments_t* mpu_fragments_find_packet_id(mpu_fragments_vector_t *vec, uint16_t mmtp_packet_id) {
 	for (size_t i = 0; i < vec->size; ++i) {
@@ -233,6 +264,27 @@ mpu_fragments_t* mpu_fragments_get_or_set_packet_id(mpu_fragments_vector_t *vec,
 	}
 
 	return entry;
+}
+
+void mpu_fragments_assign_to_payload_vector(mmtp_sub_flow_t *mmtp_sub_flow, mmtp_mpu_type_packet_header_fields_t *mpu_type_packet) {
+	//use mmtp_sub_flow ref, find packet_id, map into mpu/mfu vector
+//	mmtp_sub_flow_t mmtp_sub_flow = mpu_type_packet->mpu_
+
+	mpu_fragments_t *mpu_fragments = mpu_fragments_find_packet_id(&mmtp_sub_flow->mpu_fragments_vector, mpu_type_packet->mmtp_packet_id);
+
+
+	if(mpu_type_packet->mpu_fragment_type == 0x00) {
+		//push to mpu_metadata fragments vector
+		mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->mpu_metadata_fragments_vector, mpu_type_packet);
+	} else if(mpu_type_packet->mpu_fragment_type == 0x01) {
+		//push to mpu_movie_fragment
+		mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->mpu_movie_fragment_metadata_vector, mpu_type_packet);
+
+	} else if(mpu_type_packet->mpu_fragment_type == 0x02) {
+		//push to media_fragment
+		mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->media_fragment_unit_vector, mpu_type_packet);
+
+	}
 }
 
 
@@ -303,7 +355,7 @@ mmtp_packet_header_fields_t* mmtp_packet_create(block_t * raw_packet,
 	return entry;
 }
 
-void mmtp_sub_flow_vector_push_mmtp_packet(mmtp_sub_flow_t *sub_flow_vec, mmtp_packet_header_fields_t *entry) {
+void mmtp_sub_flow_push_mmtp_packet(mmtp_sub_flow_t *sub_flow, mmtp_packet_header_fields_t *entry) {
 	if(entry->mmtp_packet_version == 0x00) {
 		/**
 		 *
@@ -312,15 +364,17 @@ void mmtp_sub_flow_vector_push_mmtp_packet(mmtp_sub_flow_t *sub_flow_vec, mmtp_p
 		 *
 		 */
 
-		mpu_fragments_t *mpu_fragments = mpu_fragments_get_or_set_packet_id(&sub_flow_vec->mpu_fragments_vector, entry->mmtp_packet_id);
+		mpu_fragments_t *mpu_fragments = mpu_fragments_get_or_set_packet_id(&sub_flow->mpu_fragments_vector, entry->mmtp_packet_id);
+		//hack
+		mpu_fragments->mmtp_sub_flow = sub_flow;
 
 		vlc_vector_push(&mpu_fragments->all_fragments_vector, (mmtp_mpu_type_packet_header_fields_t*)entry);
 	} else if(entry->mmtp_packet_version == 0x01) {
-		vlc_vector_push(&sub_flow_vec->generic_object_fragments_vector, entry);
+		vlc_vector_push(&sub_flow->generic_object_fragments_vector, entry);
 	} else if(entry->mmtp_packet_version == 0x02) {
-		vlc_vector_push(&sub_flow_vec->signalling_message_fragements_vector, entry);
+		vlc_vector_push(&sub_flow->signalling_message_fragements_vector, entry);
 	} else if(entry->mmtp_packet_version == 0x03) {
-		vlc_vector_push(&sub_flow_vec->repair_symbol_vector, entry);
+		vlc_vector_push(&sub_flow->repair_symbol_vector, entry);
 	}
 }
 

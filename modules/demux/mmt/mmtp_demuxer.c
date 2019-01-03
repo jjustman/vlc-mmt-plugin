@@ -825,7 +825,7 @@ static int Demux( demux_t *p_demux )
 	mmtp_packet_header_fields_t *mmtp_packet_header = mmtp_packet_create(raw_buf, mmtp_packet_version, mmtp_payload_type, mmtp_packet_id, packet_sequence_number, packet_counter, mmtp_timestamp);
 
 	//push this to the proper fragment container, continue parsing below
-	mmtp_sub_flow_vector_push_mmtp_packet(mmtp_sub_flow, mmtp_packet_header);
+	mmtp_sub_flow_push_mmtp_packet(mmtp_sub_flow, mmtp_packet_header);
 
 
 	//if our header extension length is set, then block extract the header extension length, adn we should be at our payload data
@@ -889,6 +889,10 @@ static int Demux( demux_t *p_demux )
 		mpu_type_packet->mpu_fragmentation_counter = mpu_fragmentation_counter;
 		mpu_type_packet->mpu_sequence_number = mpu_sequence_number;
 
+		//re-assign from mpu_fragments_t.all_fragments_vector to proper mpu/mfu vectors
+		mpu_fragments_assign_to_payload_vector(mmtp_sub_flow, mpu_type_packet);
+
+		//VECTOR: assign data unit payload once parsed, eventually replacing processMpuPacket
 
 		uint16_t data_unit_length = 0;
 		int remainingPacketLen = -1;
@@ -920,6 +924,7 @@ static int Demux( demux_t *p_demux )
 
 				buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 				tmp_mpu_fragment->i_buffer = to_read_packet_length;
+				mpu_type_packet->mpu_data_unit_payload = block_Duplicate(tmp_mpu_fragment);
 
 				processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, 0, 0, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
 				remainingPacketLen = mmtp_raw_packet_size - (buf - raw_buf);
@@ -1031,6 +1036,16 @@ static int Demux( demux_t *p_demux )
 	//							mpu_fragmentation_indicator, movie_fragment_sequence_number, sample_number, offset, priority, dep_counter);
 					}
 
+					//set timed attributes, e.g. sample_number
+					mpu_data_unit_payload_fragments_timed_t *mpu_data_unit_timed = (mpu_data_unit_payload_fragments_timed_t*) mpu_type_packet;
+					mpu_data_unit_timed->movie_fragment_sequence_number = movie_fragment_sequence_number;
+					mpu_data_unit_timed->sample_number = sample_number;
+					mpu_data_unit_timed->offset = offset;
+					mpu_data_unit_timed->priority = priority;
+					mpu_data_unit_timed->dep_counter = dep_counter;
+
+
+
 					//end mfu box read
 
 					to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
@@ -1051,6 +1066,8 @@ static int Demux( demux_t *p_demux )
 						buf = extract(buf, mmthsample_sequence_number, 2);
 						//end reading of mmthsample box
 					}
+					mpu_data_unit_payload_fragments_nontimed_t *mpu_data_unit_nontimed = (mpu_data_unit_payload_fragments_timed_t*) mpu_type_packet;
+					mpu_data_unit_nontimed->non_timed_mfu_item_id = non_timed_mfu_item_id;
 
 					msg_Info(p_demux, "mpu mode (0x02), non-timed MFU, item_id is: %zu", non_timed_mfu_item_id);
 					to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
@@ -1063,6 +1080,8 @@ static int Demux( demux_t *p_demux )
 
 				buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 				tmp_mpu_fragment->i_buffer = to_read_packet_length;
+
+				mpu_type_packet->mpu_data_unit_payload = block_Duplicate(tmp_mpu_fragment);
 
 				//send off only the CLEAN mdat payload from our MFU
 				processMpuPacket(p_demux, mmtp_packet_id, mpu_sequence_number, sample_number, offset, mpu_fragment_type, mpu_fragmentation_indicator, tmp_mpu_fragment);
