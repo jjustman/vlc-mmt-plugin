@@ -2,7 +2,8 @@ demuxdir = $(pluginsdir)/demux
 demux_LTLIBRARIES =
 
 #jjustman-2018-12-18 - adding mmt demuxer, include libmp4 referenced symbols
-libmmt_plugin_la_SOURCES = demux/mmt/mmtp_demuxer.c demux/mmt/mp4.h \
+libmmt_plugin_la_SOURCES = demux/mmt/mmtp_demuxer.c demux/mmt/mmtp_types.h \
+						   demux/mmt/mp4.h \
                            demux/mmt/fragments.c demux/mmt/fragments.h \
                            demux/mmt/libmp4.c demux/mmt/libmp4.h \
                            demux/mmt/languages.h \

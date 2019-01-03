@@ -190,6 +190,7 @@ vlc_module_end ()
 
 
 
+typedef struct VLC_VECTOR(struct mmtp_sub_flow_t *) mmtp_sub_flow_vector_t;
 
 typedef struct
 {
@@ -266,9 +267,7 @@ typedef struct
     //todo -put this in a map
     block_t *mpu_metadata_block;
 
-   // vlc_dictionary_t packet_id_dict;
-    //    vlc_dictionary_init( &p_node->attr_dict, 0 );
-
+    mmtp_sub_flow_vector_t mmtp_sub_flow_vector;
 
 } demux_sys_t;
 
@@ -400,10 +399,12 @@ typedef struct {
 
 typedef struct {
 	_MMTP_PACKET_HEADER_FIELDS;
+
 } signalling_message_fragments_t;
 
 typedef struct {
 	_MMTP_PACKET_HEADER_FIELDS;
+
 } repair_symbol_t;
 
 typedef struct VLC_VECTOR(struct mpu_fragments_t *) 				mpu_fragments_vector_t;
@@ -430,7 +431,6 @@ typedef struct  {
 
 } mmtp_sub_flow_t;
 
-typedef struct VLC_VECTOR(struct mmtp_sub_flow_t *) mmtp_sub_flow_vector;
 
 
 
@@ -717,16 +717,6 @@ static int Open( vlc_object_t * p_this )
     p_demux->pf_demux = Demux;
     p_demux->pf_control = Control;
 
-    msg_Info(p_demux, "mmtp_demuxer.open() - inline libmp4_open");
-
-    MP4_Box_t       *p_ftyp;
-    const MP4_Box_t *p_mvhd = NULL;
-    const MP4_Box_t *p_mvex = NULL;
-
-    signalling_message_fragments_t z;
-
-
-    bool      b_enabled_es;
     p_sys = calloc( 1, sizeof( demux_sys_t ) );
 
     if ( !p_sys )
@@ -737,6 +727,7 @@ static int Open( vlc_object_t * p_this )
     p_sys->obj = p_this;
     p_sys->context.i_lastseqnumber = UINT32_MAX;
     p_sys->p_mpu_block = NULL;
+
 //    p_sys->b_seekable = true;
 //    p_sys->b_fragmented = true;
 
@@ -756,7 +747,7 @@ static int Open( vlc_object_t * p_this )
 }
 
 /**
- * Destroys the MMTP-demuxer, no-op for now
+ * Destroys the MMTP-demuxer
  */
 static void Close( vlc_object_t *p_this )
 {

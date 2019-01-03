@@ -1,0 +1,27 @@
+# rebuild modules makefile
+cd ..
+
+unset PKG_CONFIG_PATH
+unset PKG_CONFIG_LIBDIR
+
+export OSX_VERSION=10.11
+
+export CC=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc
+export CXX=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++
+export OBJC=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc
+export CFLAGS="-g" 
+export CXXFLAGS="-g"
+
+export PATH=$PWD/build/bin:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin
+
+cd extras/tools
+./bootstrap && make
+cd ../..
+
+export PATH=$PWD/extras/tools/build/bin:$PATH
+
+cd build
+
+../extras/package/macosx/configure.sh --enable-debug  --host=x86_64-apple-darwin17 --with-macosx-sdk=`xcrun --show-sdk-path`
+
+../extras/package/macosx/build.sh -j8
