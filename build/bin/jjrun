@@ -1,2 +1,2 @@
 clear
-lldb -o run  ./vlc-osx-static udp://@239.255.10.1:51001
+lldb -o "b malloc_error_break" -o run  ./vlc-osx-static udp://@239.255.10.1:51001
