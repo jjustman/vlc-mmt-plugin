@@ -21,7 +21,7 @@ Value		Data Type					Definition of data unit
 Eight types of signalling message for package consumption:
 
 	PA:  	package access, contains tables for all tables required for package access
-	MPT: 	media presentation information, contains presentation information document
+	MPI: 	media presentation information, contains presentation information document
 	MPT: 	MMT package table for single package consumption
 	CRI: 	clock related information, maps between NTP and MPEG-2 system time clock
 	DCI: 	device capability message
@@ -96,10 +96,150 @@ PA_message() {
 	}
 }
 
+<10.3.7.2> PA table
+
+
+
 MPI Message - Media Presentation Information
 presentation information document
 
 
+
+MPT table: MMT package table
+
+
+Syntax												Value		No. bits	Mnemonic
+------------										--------	---------	---------
+MP_table() {
+	table_id													8			uimsbf
+	version														8
+	length														16
+	reserved										"11 1111"	6			bslbf
+	MP_table_mode
+	if ((table_id == 0x20) or (table_id == 0x11)) {				2
+    	MMT_package_id {							N1	
+      		MMT_package_id_length								8
+      		for (i=0; i<N1; i++) {
+          		MMT_package_id_byte								8
+			}
+		}
+		
+    	MP_table_descriptors {						N2
+    		MP_table_descriptors_length							16
+   			for (i=0; i<N2; i++) {
+				MP_table_descriptors_byte						8
+			}
+		}
+	}
+	number_of_assets								N3			8
+	for (i=0; i<N3; i++) {
+		Identifier_mapping()
+		asset_type												32
+		reserved									"1111 11"	6
+		default_asset_flag										1
+		asset_clock_relation_flag								1
+		if (asset_clock_relation_flag == 1) {
+			asset_clock_relation_id 							8
+			reserved								"1111 111"	7
+			asset_timescale_flag								1
+			if (asset_time_scale_flag == 1) {
+	            asset_timescale									32
+			} 
+		}
+		
+		asset_location {
+        	location_count							N4			8
+         	for (i=0; i<N4; i++) {
+         		MMT_general_location_info()
+			}
+		}
+     	asset_descriptors {
+        	asset_descriptors_length				N5			16
+        	for (j=0; j<N5; j++) {
+            	asset_descriptors_byte							8
+			}
+		}
+	}
+ }
+ 
+ 
+ 10.5.4 GFDT descriptor
+ 
+ 
+ 10.6.1 MMT_general_location_info
+ 
+ 
+ 10.7 ID and tags values
+	 
+	 Message Identifier (message_id) values
+		 
+		 Value				Description
+		 -----				-----------
+		 0x0000				PA message
+		 0x0001 ~ 0x0010	MPI message
+		 0x0011 ~ 0x0020	MPT message
+		 0x0021 ~ 0x01FF	Reserved
+		 
+		 0x0200				CRI message
+		 0x0201				DCI message
+		 0x0202				SSWR message
+		 0x0203				AL_FEC message
+		 0x0204				HRBM message
+		 0x0205				MC message
+		 0x0206				AC message
+		 0x0207				AF message
+		 0x0208				RQF message
+		 0x0209				ADC message
+		 0x020A				HRB removal message
+		 0x020B				LS message
+		 0x020C				LR message
+		 0x020D				NAMF message
+		 0x020E				LDC message
+		 
+		 0x020F ~ 0x6FFF	Reserved for ISO (16 bit)
+		 0x7000 ~ 0x7FFF	Reserved for ISO (32 bit)
+		 
+		 0x8000 ~ 0xFFFF	Reserved for private use
+		 
+		 
+	 
+ 	Table Identifier (table_id) values
+ 	
+ 		Value				Description
+ 		-----				-----------
+ 		0x00				PA table
+ 		0x01				Main PI (subset 0 of MPI table)
+ 		0x02 ~ 0x0F			Subset 1 MPI table ~ Subset 14 MPI table
+ 		0x10				Complete MPI table
+ 		0x11 ~ 0x1F			Subset 0 MP table ~ Subset 14 MP table
+ 		0x20				Complete MP table
+ 		0x21				CRI table
+ 		0x22				DCI table
+ 		0x23				SIT table
+ 		0x24 ~ 0x7F			Reserved for ISO (16 bit)
+ 		0x80 ~ 0xFF			Reserved for private use
+ 		
+ 		
+ 	Descriptor tag values
+ 	
+ 		Value				Description
+ 		-----				-----------
+ 		0x0000				CRI descriptor
+ 		0x0001				MPU timestamp descriptor
+ 		0x0002				Dependency descriptor
+ 		0x0003				GFDT descriptor
+ 		0x0004				SI descriptor
+ 		0x0005 ~ 0x3FFF		ISO 8bit
+ 		0x4000 ~ 0x6FFF		ISO 16bit
+ 		0x7000 ~ 0x7FFF		ISO 32bit
+ 		0x8000 ~ 0xFFFF		Reserved for private use
+ 		
+ 		
+ 		
+ 		
+ 
+ 
+ 
 
 
 < ISO/IEC 23008-1:2017 >
