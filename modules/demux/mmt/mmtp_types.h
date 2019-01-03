@@ -14,6 +14,8 @@
 #include <assert.h>
 #include <limits.h>
 
+#include "libmp4.h"
+#include "mp4.h"
 
 /**
  *
@@ -116,7 +118,6 @@ typedef struct {
 	struct mmtp_sub_flow_t *mmtp_sub_flow;
 	uint16_t mmtp_packet_id;
 
-
 	mpu_type_packet_header_fields_vector_t 		all_fragments_vector;
 
 	//MPU Fragment type collections for reconstruction/recovery of fragments
@@ -163,6 +164,12 @@ typedef struct  {
 
 	//mpu (media_processing_unit):			paylod_type==0x00
 	mpu_fragments_vector_t 					mpu_fragments_vector;
+
+	//todo - refactor this out
+	MP4_Box_t*								mpu_fragments_p_root_box;
+    MP4_Box_t*								mpu_fragments_p_moov;
+    mp4_track_t*							mpu_demux_track;
+    block_t*								p_mpu_block;
 
 	//generic object:						payload_type==0x01
 	generic_object_fragments_vector_t 		generic_object_fragments_vector;
