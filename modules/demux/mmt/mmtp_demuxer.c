@@ -1111,28 +1111,35 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 		block_t **reassembled_mpu = &first;
 		for(int i=0; i < total_fragments; i++) {
 			mmtp_payload_fragments_union_t *packet = data_unit_payload_fragments->data[i];
-			msg_Info(p_obj, "%d:processMpuPacket - reassembly, mpu_sequence_number: %d, mpu_fragment_type:%d, mpu_fragmentation_indicator: %d, sample_number: %d, payload: %p",
-					__LINE__,
-					packet->mpu_data_unit_payload_fragments_timed.mpu_sequence_number,
-					packet->mpu_data_unit_payload_fragments_timed.mpu_fragment_type,
-					packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator,
-					packet->mpu_data_unit_payload_fragments_timed.sample_number,
-					packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
+
 
 			if(packet->mpu_data_unit_payload_fragments_timed.mpu_fragment_type == 0x02)  {
-				if(packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator == 0x02 || packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator == 0x03 ) {
-					block_ChainLastAppend(&reassembled_mpu, packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
-				}
+				msg_Info(p_obj, "%d:processMpuPacket:reassembly - appending, mpu_sequence_number: %d, mpu_fragment_type:%d, mpu_fragmentation_indicator: %d, sample_number: %d, payload size: %d (%p)",
+									__LINE__,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_sequence_number,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_fragment_type,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator,
+									packet->mpu_data_unit_payload_fragments_timed.sample_number,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload->i_buffer,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
+				block_ChainLastAppend(&reassembled_mpu, packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
+			} else {
+				msg_Info(p_obj, "%d:processMpuPacket:reassembly - omitting,  mpu_sequence_number: %d, mpu_fragment_type:%d, mpu_fragmentation_indicator: %d, sample_number: %d, payload size: %d (%p)",
+									__LINE__,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_sequence_number,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_fragment_type,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator,
+									packet->mpu_data_unit_payload_fragments_timed.sample_number,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload->i_buffer,
+									packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
 			}
 		}
 
 		//todo, re-sequence these by fragmentation_counter DESC,
-		block_t* reassembled_mpu_final = block_ChainGather(reassembled_mpu);
+		block_t* reassembled_mpu_final = block_ChainGather(first);
 
 		uint64_t manual_pts_calculation = 1 * uS + t + ((1001ULL * uS) / (60000ULL *uS));
 		reassembled_mpu_final->i_pts = manual_pts_calculation;
-
-		es_out_Send( p_obj->out, p_track->p_es, reassembled_mpu_final);
 
 		__LOG_INFO2(p_obj, "%d:processMpuPacket - SENDING REASSEMBLED: mmtp_packet_id: %u, mpu_sequence_number: %u, es_out_Send, size: %d, pts: %llu, p_track->p_es: %p, p_root: %p, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %u, tmp_mpu_fragment: %p",
 			__LINE__,
@@ -1147,7 +1154,11 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 			mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragmentation_indicator,
 			(void*) tmp_mpu_fragment);
 
+		es_out_Send( p_obj->out, p_track->p_es, block_Duplicate(reassembled_mpu_final));
 
+		//	block_Release(reassembled_mpu_final);
+
+		vlc_vector_clear(data_unit_payload_fragments);
 	}
 
 	__LOG_INFO(p_obj, "%d:processMpuPacket - return - mpu_fragment_type=0x%x, p_root_box: %p", __LINE__,
