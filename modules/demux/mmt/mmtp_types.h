@@ -18,7 +18,9 @@
 #include "mp4.h"
 
 //logging hack to quiet output....
-#define __LOG_INFO(...) (msg_Info(__VA_ARGS__))
+#define __LOG_INFO(...)
+#define __LOG_INFO2(...) (msg_Info(__VA_ARGS__))
+
 #define __LOG_DEBUG(...)
 #define __PRINTF_DEBUG(...)
 
@@ -160,6 +162,31 @@ typedef struct {
 
 typedef struct VLC_VECTOR(mpu_data_unit_payload_fragments_t *) mpu_data_unit_payload_fragments_vector_t;
 
+
+typedef struct {
+	MP4_Box_t*		mpu_fragments_p_root_box;
+	MP4_Box_t*		mpu_fragments_p_moov;
+	mp4_track_t*	mpu_demux_track;
+	block_t*		p_mpu_block;
+	uint32_t     	i_timescale;          /* movie time scale */
+	uint64_t     	i_moov_duration;
+	uint64_t     	i_cumulated_duration; /* Same as above, but not from probing, (movie time scale) */
+	uint64_t     	i_duration;           /* Declared fragmented duration (movie time scale) */
+	unsigned int 	i_tracks;       /* number of tracks */
+	mp4_track_t  	*track;         /* array of track */
+	bool        	b_fragmented;   /* fMP4 */
+	bool         	b_seekable;
+	stream_t 		*s_frag;
+
+	struct
+	{
+		 uint32_t        i_current_box_type;
+		 MP4_Box_t      *p_fragment_atom;
+		 uint64_t        i_post_mdat_offset;
+		 uint32_t        i_lastseqnumber;
+	} context;
+} mpu_isobmff_fragment_parameters_t;
+
 typedef struct {
 	struct mmtp_sub_flow_t *mmtp_sub_flow;
 	uint16_t mmtp_packet_id;
@@ -177,6 +204,8 @@ typedef struct {
 	//MPU (media fragment_unit),				mpu_fragment_type==0x02
 	mpu_data_unit_payload_fragments_vector_t	media_fragment_unit_vector;
 
+	mpu_isobmff_fragment_parameters_t			mpu_isobmff_fragment_parameters;
+
 } mpu_fragments_t;
 
 /**
@@ -184,40 +213,16 @@ typedef struct {
  */
 
 
+//todo - refactor mpu_fragments to vector, create a new tuple class for mmtp_sub_flow_sequence
+
 typedef struct  {
 	uint16_t mmtp_packet_id;
 
 	//mmtp payload type collections for reconstruction/recovery of payload types
 
-	//mpu (media_processing_unit):			paylod_type==0x00
+	//mpu (media_processing_unit):				paylod_type==0x00
 	//mpu_fragments_vector_t 					mpu_fragments_vector;
-	mpu_fragments_t							*mpu_fragments;
-
-	//todo - refactor this out
-	MP4_Box_t*								mpu_fragments_p_root_box;
-    MP4_Box_t*								mpu_fragments_p_moov;
-    mp4_track_t*							mpu_demux_track;
-    block_t*								p_mpu_block;
-    uint32_t     i_timescale;          /* movie time scale */
-    uint64_t     i_moov_duration;
-    uint64_t     i_cumulated_duration; /* Same as above, but not from probing, (movie time scale) */
-    uint64_t     i_duration;           /* Declared fragmented duration (movie time scale) */
-    unsigned int i_tracks;       /* number of tracks */
-    mp4_track_t  *track;         /* array of track */
-    bool         b_fragmented;   /* fMP4 */
-    bool         b_seekable;
-    stream_t *s_frag;
-
-    struct
-    {
-         uint32_t        i_current_box_type;
-         MP4_Box_t      *p_fragment_atom;
-         uint64_t        i_post_mdat_offset;
-         uint32_t        i_lastseqnumber;
-     } context;
-
-
-    //end
+	mpu_fragments_t								*mpu_fragments;
 
 	//generic object:							payload_type==0x01
     mmtp_generic_object_fragments_vector_t 		mmtp_generic_object_fragments_vector;
