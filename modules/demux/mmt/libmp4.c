@@ -597,7 +597,7 @@ static int MP4_ReadBoxContainerRawInBox( stream_t *p_stream, MP4_Box_t *p_contai
 
 static int MP4_ReadBoxContainer( stream_t *p_stream, MP4_Box_t *p_container )
 {
-	msg_Err(p_stream, "%d:MP4_ReadBoxContainer, %u ", __LINE__, p_container->i_type);
+	msg_Info(p_stream, "%d:MP4_ReadBoxContainer, %u ", __LINE__, p_container->i_type);
 
     if( p_container->i_size &&
         ( p_container->i_size <= (size_t)mp4_box_headersize(p_container ) + 8 ) )
@@ -611,7 +611,7 @@ static int MP4_ReadBoxContainer( stream_t *p_stream, MP4_Box_t *p_container )
                       mp4_box_headersize( p_container ) ) )
         return 0;
 
-	msg_Err(p_stream, "%d:MP4_ReadBoxContainer", __LINE__);
+    msg_Info(p_stream, "%d:MP4_ReadBoxContainer", __LINE__);
 
     return MP4_ReadBoxContainerChildren( p_stream, p_container, NULL );
 }

@@ -18,11 +18,21 @@
 #include "mp4.h"
 
 //logging hack to quiet output....
-#define __LOG_INFO(...)
+#define __LOG_INFO(...) (msg_Info(__VA_ARGS__))
 #define __LOG_INFO2(...) (msg_Info(__VA_ARGS__))
 
-#define __LOG_DEBUG(...)
-#define __PRINTF_DEBUG(...)
+#define __LOG_DEBUG(...) (msg_Info(__VA_ARGS__))
+#define __PRINTF_DEBUG(...) (printf(__VA_ARGS__))
+
+
+#define MIN_MMTP_SIZE 32
+#define MAX_MMTP_SIZE 1514
+
+//packet type=v0/v1 have an upper bound of ~1432
+#define UPPER_BOUND_MPU_FRAGMENT_SIZE 1432
+
+//
+#define MPU_REASSEMBLE_MAX_BUFFER 8192000
 
 /**
  *
@@ -42,9 +52,11 @@
  */
 
 
+typedef struct mmtp_sub_flow mmtp_sub_flow_t;
+
 #define _MMTP_PACKET_HEADER_FIELDS 			\
 	block_t *raw_packet;					\
-	struct mmtp_sub_flow_t *mmtp_sub_flow;	\
+	mmtp_sub_flow_t *mmtp_sub_flow;	\
 	uint8_t mmtp_packet_version; 			\
 	uint8_t packet_counter_flag; 			\
 	uint8_t fec_type; 						\
@@ -188,7 +200,7 @@ typedef struct {
 } mpu_isobmff_fragment_parameters_t;
 
 typedef struct {
-	struct mmtp_sub_flow_t *mmtp_sub_flow;
+	mmtp_sub_flow_t *mmtp_sub_flow;
 	uint16_t mmtp_packet_id;
 
 	mpu_type_packet_header_fields_vector_t 		all_mpu_fragments_vector;
@@ -213,9 +225,7 @@ typedef struct {
  */
 
 
-//todo - refactor mpu_fragments to vector, create a new tuple class for mmtp_sub_flow_sequence
-
-typedef struct  {
+typedef struct mmtp_sub_flow {
 	uint16_t mmtp_packet_id;
 
 	//mmtp payload type collections for reconstruction/recovery of payload types
@@ -234,6 +244,9 @@ typedef struct  {
 	mmtp_repair_symbol_vector_t 				mmtp_repair_symbol_vector;
 
 } mmtp_sub_flow_t;
+
+
+//todo - refactor mpu_fragments to vector, create a new tuple class for mmtp_sub_flow_sequence
 
 
 typedef struct VLC_VECTOR(mmtp_sub_flow_t*) mmtp_sub_flow_vector_t;
@@ -289,11 +302,7 @@ mpu_fragments_t* mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_
 		entry->mpu_sequence_number = mpu_type_packet->mmtp_mpu_type_packet_header.mpu_sequence_number;
 		vlc_vector_init(&entry->timed_fragments_vector);
 		vlc_vector_init(&entry->nontimed_fragments_vector);
-		if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_timed_flag) {
-			vlc_vector_push(&entry->timed_fragments_vector, entry);
-		} else {
-			vlc_vector_push(&entry->nontimed_fragments_vector, entry);
-		}
+		vlc_vector_push(vec, entry);
 	}
 
 	return entry;
@@ -332,17 +341,28 @@ void mpu_fragments_assign_to_payload_vector(mmtp_sub_flow_t *mmtp_sub_flow, mmtp
 //	mmtp_sub_flow_t mmtp_sub_flow = mpu_type_packet->mpu_
 
 	mpu_fragments_t *mpu_fragments = mmtp_sub_flow->mpu_fragments;
-	__PRINTF_DEBUG("%d:mpu_fragments_assign_to_payload_vector - mpu_fragments is: %p\n", __LINE__, mpu_fragments);
+	__PRINTF_DEBUG("%d:mpu_fragments_assign_to_payload_vector - mpu_fragments is:, all_mpu_frags_vector.size: %d %p\n", __LINE__, mpu_fragments, mpu_fragments->all_mpu_fragments_vector.size);
 
+	mpu_data_unit_payload_fragments_t *to_assign_payload_vector = NULL;
 	if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type == 0x00) {
 		//push to mpu_metadata fragments vector
-		mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->mpu_metadata_fragments_vector, mpu_type_packet);
+		to_assign_payload_vector = mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->mpu_metadata_fragments_vector, mpu_type_packet);
 	} else if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type == 0x01) {
 		//push to mpu_movie_fragment
-		mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->mpu_movie_fragment_metadata_vector, mpu_type_packet);
+		to_assign_payload_vector = mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->mpu_movie_fragment_metadata_vector, mpu_type_packet);
 	} else if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type == 0x02) {
 		//push to media_fragment
-		mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->media_fragment_unit_vector, mpu_type_packet);
+		to_assign_payload_vector = mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet(&mpu_fragments->media_fragment_unit_vector, mpu_type_packet);
+	}
+
+	if(to_assign_payload_vector) {
+		__PRINTF_DEBUG("%d: to_assign_payload_vector, sequence_number: %d, size is: %d\n", __LINE__, mpu_type_packet->mmtp_mpu_type_packet_header.mpu_sequence_number, to_assign_payload_vector->timed_fragments_vector.size);
+		if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_timed_flag) {
+			__PRINTF_DEBUG("%d:mpu_data_unit_payload_fragments_get_or_set_mpu_sequence_number_from_packet, sequence_number: %d, pushing to timed_fragments_vector: %p", __LINE__, to_assign_payload_vector->mpu_sequence_number, to_assign_payload_vector->timed_fragments_vector);
+			vlc_vector_push(&to_assign_payload_vector->timed_fragments_vector, mpu_type_packet);
+		} else {
+			vlc_vector_push(&to_assign_payload_vector->nontimed_fragments_vector, mpu_type_packet);
+		}
 
 	}
 }
@@ -552,8 +572,7 @@ void* extract(uint8_t *bufPosPtr, uint8_t *dest, int size) {
 }
 
 
-#define MIN_MMTP_SIZE 32
-#define MAX_MMTP_SIZE 1514
+
 
 
 int mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmtp_packet, demux_t *p_demux ) {
