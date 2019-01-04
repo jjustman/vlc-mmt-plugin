@@ -1047,7 +1047,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 
 	//convert to microseconds
 	uint64_t t = ((ts.tv_sec) * uS) + ((ts.tv_nsec) / 1000ULL) ; // convert tv_sec & tv_usec to millisecond
-	es_out_SetPCR( p_obj->out, t );
+	es_out_SetPCR( p_obj->out, t + 1 *uS);
 
 	uint64_t manual_pts_calculation = 2 * uS + t;
 	//1 * uS + t + ((1001ULL * uS) / (60000ULL *uS));
