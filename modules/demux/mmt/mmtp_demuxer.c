@@ -615,6 +615,7 @@ static int Demux( demux_t *p_demux )
 		uint8_t mpu_fragmentation_counter;
 		//msg_Warn( p_demux, "buf pos before extract is: %p", (void *)buf);
 		buf = extract(buf, &mpu_fragmentation_counter, 1);
+		mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_fragmentation_counter = mpu_fragmentation_counter;
 
 		//re-fanagle
 		uint8_t mpu_sequence_number_block[4];
@@ -1131,6 +1132,12 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 		//todo - sort by fragmentation counter DESC
 		block_t *first = calloc(1, sizeof(block_t));
 		block_t **reassembled_mpu = &first;
+		int first_fragment_counter = -1;
+		int last_fragment_counter = -1;
+		int started_with_first_fragment_of_du = 0;
+		int ended_with_last_fragment_of_du = 0;
+		int total_sample_count = 0;
+
 		for(int i=0; i < total_fragments; i++) {
 			mmtp_payload_fragments_union_t *packet = data_unit_payload_fragments->data[i];
 
@@ -1147,6 +1154,16 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 									packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload->i_buffer,
 									packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
 				block_ChainLastAppend(&reassembled_mpu, packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
+
+				//capture some aggregate metrics here
+				if(first_fragment_counter == -1) {
+					first_fragment_counter = packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_counter;
+					started_with_first_fragment_of_du = (packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator == 0x01);
+				}
+				last_fragment_counter = packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_counter;
+				ended_with_last_fragment_of_du = (packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator == 0x03);
+				total_sample_count++;
+
 			} else {
 				__LOG_DEBUG(p_obj, "%d:processMpuPacket:reassembly - omitting,  mpu_sequence_number: %d, mpu_fragment_type:%d, mpu_fragmentation_indicator: %d, sample_number: %d, fragment_counter: %d, payload size: %d (%p)",
 									__LINE__,
@@ -1163,6 +1180,19 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 
 		//todo, re-sequence these by fragmentation_counter DESC,
 		block_t* reassembled_mpu_final = block_ChainGather(first);
+		int samples_missing =  first_fragment_counter - last_fragment_counter - total_sample_count;
+
+		__LOG_INFO2(p_obj, "%d:REASSEMBLE METRICS: started with first fragment of du: %c (fragment_count #: %d), ended with last fragment of du %c (fragment_count #: %d), samples count: %d (missing: %d)",
+					__LINE__,
+					started_with_first_fragment_of_du ? 't':'f', first_fragment_counter,
+					ended_with_last_fragment_of_du ? 't' : 'f', last_fragment_counter,
+					total_sample_count,
+					samples_missing);
+
+		if(!started_with_first_fragment_of_du || !ended_with_last_fragment_of_du || samples_missing > 5) {
+			reassembled_mpu_final->i_flags |= BLOCK_FLAG_CORRUPTED;
+		}
+
 
 		reassembled_mpu_final->i_pts = manual_pts_calculation;
 		reassembled_mpu_final->i_length = 16683; //1001 * uS / 60000 * uS;
