@@ -17,6 +17,10 @@
 #include "libmp4.h"
 #include "mp4.h"
 
+//logging hack to quiet output....
+#define __LOG_INFO(...) (msg_Info(__VA_ARGS__))
+#define __LOG_DEBUG(...)
+#define __PRINTF_DEBUG(...)
 
 /**
  *
@@ -232,10 +236,10 @@ typedef struct VLC_VECTOR(mmtp_sub_flow_t*) mmtp_sub_flow_vector_t;
 
 void mmtp_sub_flow_vector_init(mmtp_sub_flow_vector_t *mmtp_sub_flow_vector) {
 
-	printf("%d:mmtp_sub_flow_vector_init: %p\n", __LINE__, mmtp_sub_flow_vector);
+	__PRINTF_DEBUG("%d:mmtp_sub_flow_vector_init: %p\n", __LINE__, mmtp_sub_flow_vector);
 
 	vlc_vector_init(mmtp_sub_flow_vector);
-	printf("%d:mmtp_sub_flow_vector_init: %p\n", __LINE__, mmtp_sub_flow_vector);
+	__PRINTF_DEBUG("%d:mmtp_sub_flow_vector_init: %p\n", __LINE__, mmtp_sub_flow_vector);
 }
 /**
 
@@ -309,7 +313,7 @@ mpu_fragments_t* mpu_fragments_get_or_set_packet_id(mmtp_sub_flow_t* mmtp_sub_fl
 
 	mpu_fragments_t *entry = mmtp_sub_flow->mpu_fragments;
 	if(!entry) {
-		printf("*** %d:mpu_fragments_get_or_set_packet_id - adding vector: %p, all_fragments_vector is: %p\n",
+		__PRINTF_DEBUG("*** %d:mpu_fragments_get_or_set_packet_id - adding vector: %p, all_fragments_vector is: %p\n",
 				__LINE__, entry, entry->all_mpu_fragments_vector);
 
 		allocate_mmtp_sub_flow_mpu_fragments(mmtp_sub_flow);
@@ -323,7 +327,7 @@ void mpu_fragments_assign_to_payload_vector(mmtp_sub_flow_t *mmtp_sub_flow, mmtp
 //	mmtp_sub_flow_t mmtp_sub_flow = mpu_type_packet->mpu_
 
 	mpu_fragments_t *mpu_fragments = mmtp_sub_flow->mpu_fragments;
-	printf("%d:mpu_fragments_assign_to_payload_vector - mpu_fragments is: %p\n", __LINE__, mpu_fragments);
+	__PRINTF_DEBUG("%d:mpu_fragments_assign_to_payload_vector - mpu_fragments is: %p\n", __LINE__, mpu_fragments);
 
 	if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type == 0x00) {
 		//push to mpu_metadata fragments vector
@@ -427,7 +431,7 @@ mmtp_payload_fragments_union_t* mmtp_packet_create(block_t * raw_packet,
 void mmtp_sub_flow_push_mmtp_packet(mmtp_sub_flow_t *mmtp_sub_flow, mmtp_payload_fragments_union_t *mmtp_packet) {
 	mmtp_packet->mmtp_packet_header.mmtp_sub_flow = mmtp_sub_flow;
 
-	printf("%d:mmtp_sub_flow_push_mmtp_packet, mmtp_payload_type: 0x%x\n", __LINE__, mmtp_packet->mmtp_packet_header.mmtp_payload_type);
+	__PRINTF_DEBUG("%d:mmtp_sub_flow_push_mmtp_packet, mmtp_payload_type: 0x%x\n", __LINE__, mmtp_packet->mmtp_packet_header.mmtp_payload_type);
 	if(mmtp_packet->mmtp_packet_header.mmtp_payload_type == 0x00) {
 		//(mmtp_mpu_type_packet_header_fields_t*
 		//defer, we don;'t know enough about the type
@@ -573,9 +577,9 @@ int mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmt
 //
 //		for(int i=0; i < mmtp_raw_packet_size; i++) {
 //			if(i>1 && (i+1)%8 == 0) {
-//				snprintf(buffer + (i*3), 4, "%02X\n", raw_buf[i]);
+//				sn__PRINTF_DEBUG(buffer + (i*3), 4, "%02X\n", raw_buf[i]);
 //			} else {
-//				snprintf(buffer + (i*3), 4, "%02X ", raw_buf[i]);
+//				sn__PRINTF_DEBUG(buffer + (i*3), 4, "%02X ", raw_buf[i]);
 //			}
 //		}
 //		msg_Info(p_demux, "raw packet payload is:\n%s", buffer);
