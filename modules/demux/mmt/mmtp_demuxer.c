@@ -531,7 +531,7 @@ static int Demux( demux_t *p_demux )
 	uint8_t *buf = p_sys->buf;
 
 	//create a sub_flow with this packet_id
-	__LOG_INFO( p_demux, "%d:mmtp_demuxer, after mmtp_packet_header_parse_from_raw_packet, mmtp_packet_id is: %d, mmtp_payload_type: 0x%x, packet_counter: %d, remaining len: %d, mmtp_raw_packet_size: %d, buf: %p, raw_buf:%p",
+	__LOG_DEBUG( p_demux, "%d:mmtp_demuxer, after mmtp_packet_header_parse_from_raw_packet, mmtp_packet_id is: %d, mmtp_payload_type: 0x%x, packet_counter: %d, remaining len: %d, mmtp_raw_packet_size: %d, buf: %p, raw_buf:%p",
 			__LINE__,
 			mmtp_packet_header->mmtp_packet_header.mmtp_packet_id,
 			mmtp_packet_header->mmtp_packet_header.mmtp_payload_type,
@@ -543,7 +543,7 @@ static int Demux( demux_t *p_demux )
 
 
 	mmtp_sub_flow = mmtp_sub_flow_vector_get_or_set_packet_id(mmtp_sub_flow_vector, mmtp_packet_header->mmtp_packet_header.mmtp_packet_id);
-	__LOG_INFO( p_demux, "%d:mmtp_demuxer - mmtp_sub_flow is: %p, mmtp_sub_flow->mpu_fragments: %p", __LINE__, mmtp_sub_flow, mmtp_sub_flow->mpu_fragments);
+	__LOG_DEBUG( p_demux, "%d:mmtp_demuxer - mmtp_sub_flow is: %p, mmtp_sub_flow->mpu_fragments: %p", __LINE__, mmtp_sub_flow, mmtp_sub_flow->mpu_fragments);
 
 	//push this to the proper fragment container, continue parsing below
 	mmtp_sub_flow_push_mmtp_packet(mmtp_sub_flow, mmtp_packet_header);
@@ -648,12 +648,12 @@ static int Demux( demux_t *p_demux )
 				buf = extract(buf, &data_unit_length_block, 2);
 				mmtp_packet_header->mmtp_mpu_type_packet_header.data_unit_length = (data_unit_length_block[0] << 8) | (data_unit_length_block[1]);
 				to_read_packet_length = mmtp_packet_header->mmtp_mpu_type_packet_header.data_unit_length;
-				__LOG_INFO(p_demux, "%d:mpu data unit size: %d, mpu_aggregation_flag:1, to_read_packet_length: %d",
+				__LOG_DEBUG(p_demux, "%d:mpu data unit size: %d, mpu_aggregation_flag:1, to_read_packet_length: %d",
 						__LINE__, mmtp_packet_header->mmtp_mpu_type_packet_header.data_unit_length, to_read_packet_length);
 
 			} else {
 				to_read_packet_length = mmtp_raw_packet_size - (buf-raw_buf);
-				__LOG_INFO(p_demux, "%d:skipping data_unit_size: mpu_aggregation_flag:0, raw packet size: %d, buf: %p, raw_buf: %p, to_read_packet_length: %d",
+				__LOG_DEBUG(p_demux, "%d:skipping data_unit_size: mpu_aggregation_flag:0, raw packet size: %d, buf: %p, raw_buf: %p, to_read_packet_length: %d",
 						__LINE__, mmtp_raw_packet_size, buf, raw_buf, to_read_packet_length);
 			}
 
@@ -662,7 +662,7 @@ static int Demux( demux_t *p_demux )
 				//read our packet length just as a mpu metadata fragment or movie fragment metadata
 				//read our packet length without any mfu
 				block_t *tmp_mpu_fragment = block_Alloc(to_read_packet_length);
-				__LOG_INFO(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
+				__LOG_DEBUG(p_demux, "%d::creating tmp_mpu_fragment, setting block_t->i_buffer to: %d", __LINE__, to_read_packet_length);
 
 				buf = extract(buf, tmp_mpu_fragment->p_buffer, to_read_packet_length);
 				tmp_mpu_fragment->i_buffer = to_read_packet_length;
@@ -769,7 +769,7 @@ static int Demux( demux_t *p_demux )
 							buf = extract(buf, multilayer_layer_id_temporal_id, 2);
 						}
 
-						__LOG_INFO(p_demux, "%d:mpu mode (0x02), timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %u, sample_num: %u, offset: %u, pri: %d, dep_counter: %d, multilayer: %d",
+						__LOG_DEBUG(p_demux, "%d:mpu mode (0x02), timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %u, sample_num: %u, offset: %u, pri: %d, dep_counter: %d, multilayer: %d",
 							__LINE__,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.movie_fragment_sequence_number,
@@ -779,7 +779,7 @@ static int Demux( demux_t *p_demux )
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.dep_counter,
 							is_multilayer);
 					} else {
-						__LOG_INFO(p_demux, "%d:mpu mode (0x02), timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %u, sample_num: %u, offset: %u, pri: %d, dep_counter: %d",
+						__LOG_DEBUG(p_demux, "%d:mpu mode (0x02), timed MFU, mpu_fragmentation_indicator: %d, movie_fragment_seq_num: %u, sample_num: %u, offset: %u, pri: %d, dep_counter: %d",
 							__LINE__,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator,
 							mmtp_packet_header->mpu_data_unit_payload_fragments_timed.movie_fragment_sequence_number,
@@ -812,7 +812,7 @@ static int Demux( demux_t *p_demux )
 						//end reading of mmthsample box
 					}
 
-					__LOG_INFO(p_demux, "mpu mode (0x02), non-timed MFU, item_id is: %zu", mmtp_packet_header->mpu_data_unit_payload_fragments_nontimed.non_timed_mfu_item_id);
+					__LOG_DEBUG(p_demux, "mpu mode (0x02), non-timed MFU, item_id is: %zu", mmtp_packet_header->mpu_data_unit_payload_fragments_nontimed.non_timed_mfu_item_id);
 					to_read_packet_length = mmtp_raw_packet_size - (buf - raw_buf);
 				}
 
@@ -961,7 +961,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 
     block_t* tmp_mpu_fragment = mpu_type_packet->mmtp_mpu_type_packet_header.mpu_data_unit_payload;
 
-    __LOG_INFO(p_obj, "%d:processMpuPacket - mmtp_sub_flow.packet_id is: %hu, mmtp_sub_flow.mpu_fragments_p_root_box is: %p, mpu_sequence_number: %u, mpu_fragment_type: 0x%x, mpu_fragmentation_indicator: 0x%x, sample_num: %d, offset: %d",
+    __LOG_DEBUG(p_obj, "%d:processMpuPacket - mmtp_sub_flow.packet_id is: %hu, mmtp_sub_flow.mpu_fragments_p_root_box is: %p, mpu_sequence_number: %u, mpu_fragment_type: 0x%x, mpu_fragmentation_indicator: 0x%x, sample_num: %d, offset: %d",
 					__LINE__, mmtp_sub_flow->mmtp_packet_id,
 					isobmff_parameters->mpu_fragments_p_root_box,
 					mpu_type_packet->mmtp_mpu_type_packet_header.mpu_sequence_number,
@@ -978,14 +978,14 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
     //
     //if our mpu_fragment type is either MPU metadata (0x00 - ftyp) or Fragment metadata (0x01 - moof)
 	if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type == 0x00 || mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type == 0x01) {
-		__LOG_INFO2(p_obj, "%d:processMpuPacket - mpu_fragment_type: %d, root_box: %p, moov_box: %p",
+		__LOG_DEBUG(p_obj, "%d:processMpuPacket - mpu_fragment_type: %d, root_box: %p, moov_box: %p",
 																			__LINE__,
 																			mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type,
 																			isobmff_parameters->mpu_fragments_p_root_box,
 																			isobmff_parameters->mpu_fragments_p_moov);
 
 		if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type == 0x00 && !isobmff_parameters->mpu_fragments_p_root_box) {
-			__LOG_INFO(p_obj, "%d:processMpuPacket - MPU metadata - creating new root_box", __LINE__ );
+			__LOG_DEBUG(p_obj, "%d:processMpuPacket - MPU metadata - creating new root_box", __LINE__ );
 			stream_t *tmp_mpu_fragment_stream = vlc_stream_MemoryNew( p_obj, tmp_mpu_fragment->p_buffer, tmp_mpu_fragment->i_buffer, true);
 
 			MP4_Box_t *p_root = MP4_BoxGetRoot(tmp_mpu_fragment_stream);
@@ -997,11 +997,11 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 		    isobmff_parameters->mpu_fragments_p_root_box = p_root;
 		    isobmff_parameters->mpu_fragments_p_moov = MP4_BoxGet(p_root, "/moov" );
 
-			__LOG_INFO(p_obj, "%d:processMpuPacket - MP4_BoxGetRoot, p_root: %p", __LINE__, isobmff_parameters->mpu_fragments_p_root_box);
+		    __LOG_DEBUG(p_obj, "%d:processMpuPacket - MP4_BoxGetRoot, p_root: %p", __LINE__, isobmff_parameters->mpu_fragments_p_root_box);
 
 			//remap into p_demux
 
-			__LOG_INFO(p_obj, "%d:processMpuPacket - createTracksFromMpuMetadata, !p_root_box", __LINE__ );
+		    __LOG_DEBUG(p_obj, "%d:processMpuPacket - createTracksFromMpuMetadata, !p_root_box", __LINE__ );
 
 			createTracksFromMpuMetadata(p_obj, mmtp_sub_flow);
 
@@ -1020,7 +1020,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 //			      data offset = 1108
 //			      entry 0000 = sample_duration:16683, sample_size:89965, sample_flags:2000000, sample_composition_time_offset:50050
 
-			__LOG_INFO(p_obj, "%d:processMpuPacket - fragment metadata - mpu_fragment_type=0x%x, p_root_box: %p",
+			__LOG_DEBUG(p_obj, "%d:processMpuPacket - fragment metadata - mpu_fragment_type=0x%x, p_root_box: %p",
 					__LINE__,
 					mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type,
 					isobmff_parameters->mpu_fragments_p_root_box );
@@ -1048,25 +1048,36 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 	uint64_t t = ((ts.tv_sec) * uS) + ((ts.tv_nsec) / 1000ULL) ; // convert tv_sec & tv_usec to millisecond
 	es_out_SetPCR( p_obj->out, t );
 
+	uint64_t manual_pts_calculation = 2 * uS + t;
+	//1 * uS + t + ((1001ULL * uS) / (60000ULL *uS));
+
 
 	if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragmentation_indicator == 0x00) {
 		//TODO - use traf/tfdt for actual sample decoding time based upon mvhd.timescale (p_sys->i_timescale)
 		//for now, use the rational 1001 * uS / 60000 * uS ~ 16000us
-		uint64_t manual_pts_calculation = 1 * uS + t + ((1001ULL * uS) / (60000ULL *uS));
 		tmp_mpu_fragment->i_pts = manual_pts_calculation;
 		if( isobmff_parameters->track[i_track].fmt.i_cat == VIDEO_ES ) {
-			tmp_mpu_fragment->i_length = 1001 * uS / 60000 * uS;
+			tmp_mpu_fragment->i_length = 16683; //1001 * uS / 60000 * uS;
+
+		    //  entry 0000 = sample_duration:16683, sample_size:89965, sample_flags:2000000, sample_composition_time_offset:50050
+		} else {
+			//audio samples should be at
+			//entry 0000 = sample_duration:21333, sample_size:512, sample_flags:2000000, sample_composition_time_offset:0
+			//entry 0001 = sample_duration:21333, sample_size:513, sample_flags:10000, sample_composition_time_offset:0
+			tmp_mpu_fragment->i_length = 21333;
+
 		}
 
+		// p_track->p_es,
+		//isobmff_parameters->mpu_fragments_p_root_box,
 		es_out_Send( p_obj->out, p_track->p_es, block_Duplicate(tmp_mpu_fragment));
-		__LOG_INFO2(p_obj, "%d:processMpuPacket - SENDING SINGLE: track: %d, mmtp_packet_id: %u, mpu_sequence_number: %u, es_out_Send, size: %d, pts: %llu, p_track->p_es: %p, p_root: %p,  sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %u, tmp_mpu_fragment: %p",
+		__LOG_INFO2(p_obj, "%d:SENDING SINGLE:      track: %d, mmtp_packet_id: %u, mpu_sequence_number: %u, size: %d, pts: %llu, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %u, tmp_mpu_fragment: %p",
 				__LINE__,
 				p_track->i_track_ID,
 				mpu_type_packet->mmtp_mpu_type_packet_header.mmtp_packet_id,
 				mpu_type_packet->mmtp_mpu_type_packet_header.mpu_sequence_number,
 
-				tmp_mpu_fragment->i_buffer, t, p_track->p_es,
-				isobmff_parameters->mpu_fragments_p_root_box,
+				tmp_mpu_fragment->i_buffer, t/1000000,
 				mpu_type_packet->mpu_data_unit_payload_fragments_timed.sample_number,
 				mpu_type_packet->mpu_data_unit_payload_fragments_timed.offset,
 				mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type,
@@ -1093,7 +1104,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 		//raise(SIGABRT);
 
 		mmtp_sub_flow_t* packet_subflow = mpu_type_packet->mmtp_packet_header.mmtp_sub_flow;
-		msg_Info(p_obj, "%d:processMpuPacket - reassemble - mmtp_mpu_type_packet_header.mpu_fragmentation_indicator: 0x03", __LINE__);
+		__LOG_DEBUG(p_obj, "%d:processMpuPacket - reassemble - mmtp_mpu_type_packet_header.mpu_fragmentation_indicator: 0x03", __LINE__);
 
 		mpu_data_unit_payload_fragments_t *data_unit_payload_types = mpu_data_unit_payload_fragments_find_mpu_sequence_number(&packet_subflow->mpu_fragments->media_fragment_unit_vector, mpu_type_packet->mmtp_mpu_type_packet_header.mpu_sequence_number);
 		if(!data_unit_payload_types) {
@@ -1105,7 +1116,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 		mpu_data_unit_payload_fragments_timed_vector_t *data_unit_payload_fragments = &data_unit_payload_types->timed_fragments_vector;
 		//todo - vectorize and add in mpu_sequence_number
 		int total_fragments = data_unit_payload_fragments->size;
-		msg_Info(p_obj, "%d:processMpuPacket - mmtp_mpu_type_packet_header.mpu_fragmentation_indicator: 0x03, total_fragments: %d", __LINE__, total_fragments);
+		__LOG_DEBUG(p_obj, "%d:processMpuPacket - mmtp_mpu_type_packet_header.mpu_fragmentation_indicator: 0x03, total_fragments: %d", __LINE__, total_fragments);
 
 		int pre_alloc_size = total_fragments * UPPER_BOUND_MPU_FRAGMENT_SIZE;
 		if( pre_alloc_size > MPU_REASSEMBLE_MAX_BUFFER) {
@@ -1113,7 +1124,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 			total_fragments = __MIN(total_fragments, (MPU_REASSEMBLE_MAX_BUFFER / UPPER_BOUND_MPU_FRAGMENT_SIZE));
 		}
 
-		msg_Info(p_obj, "%d:processMpuPacket - reassembly, total size before filtering is: %d", total_fragments);
+		__LOG_DEBUG(p_obj, "%d:processMpuPacket - reassembly, total size before filtering is: %d", __LINE__, total_fragments);
 
 		//todo - add in HRBD support for how large of a buffer we should keep around
 		//each packet
@@ -1125,7 +1136,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 
 			//only pass thru MFU samples that are fragmented (e.g. mpu_fragmentation_indicator != 0x00
 			if(packet->mpu_data_unit_payload_fragments_timed.mpu_fragment_type == 0x02 && packet->mpu_data_unit_payload_fragments_timed.mpu_fragmentation_indicator != 0x00)  {
-				msg_Info(p_obj, "%d:processMpuPacket:reassembly - appending, mpu_sequence_number: %d, mpu_fragment_type:%d, mpu_fragmentation_indicator: %d, sample_number: %d, fragment_counter: %d, payload size: %d (%p)",
+				__LOG_DEBUG(p_obj, "%d:processMpuPacket:reassembly - appending, mpu_sequence_number: %d, mpu_fragment_type:%d, mpu_fragmentation_indicator: %d, sample_number: %d, fragment_counter: %d, payload size: %d (%p)",
 									__LINE__,
 									packet->mpu_data_unit_payload_fragments_timed.mpu_sequence_number,
 									packet->mpu_data_unit_payload_fragments_timed.mpu_fragment_type,
@@ -1137,7 +1148,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 									packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
 				block_ChainLastAppend(&reassembled_mpu, packet->mpu_data_unit_payload_fragments_timed.mpu_data_unit_payload);
 			} else {
-				msg_Info(p_obj, "%d:processMpuPacket:reassembly - omitting,  mpu_sequence_number: %d, mpu_fragment_type:%d, mpu_fragmentation_indicator: %d, sample_number: %d, fragment_counter: %d, payload size: %d (%p)",
+				__LOG_DEBUG(p_obj, "%d:processMpuPacket:reassembly - omitting,  mpu_sequence_number: %d, mpu_fragment_type:%d, mpu_fragmentation_indicator: %d, sample_number: %d, fragment_counter: %d, payload size: %d (%p)",
 									__LINE__,
 									packet->mpu_data_unit_payload_fragments_timed.mpu_sequence_number,
 									packet->mpu_data_unit_payload_fragments_timed.mpu_fragment_type,
@@ -1153,19 +1164,17 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 		//todo, re-sequence these by fragmentation_counter DESC,
 		block_t* reassembled_mpu_final = block_ChainGather(first);
 
-		uint64_t manual_pts_calculation = 1 * uS + t + ((1001ULL * uS) / (60000ULL *uS));
 		reassembled_mpu_final->i_pts = manual_pts_calculation;
-		reassembled_mpu_final->i_length = 1001 * uS / 60000 * uS;
+		reassembled_mpu_final->i_length = 16683; //1001 * uS / 60000 * uS;
 
-		__LOG_INFO2(p_obj, "%d:processMpuPacket - SENDING REASSEMBLED: track: %d, mmtp_packet_id: %u, mpu_sequence_number: %u, es_out_Send, size: %d, pts: %llu, p_track->p_es: %p, p_root: %p, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %u, tmp_mpu_fragment: %p",
+		__LOG_INFO2(p_obj, "%d:SENDING REASSEMBLED: track: %d, mmtp_packet_id: %u, mpu_sequence_number: %u, size: %d, pts: %llu, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %u, tmp_mpu_fragment: %p",
 			__LINE__,
 			p_track->i_track_ID,
 
 			mpu_type_packet->mmtp_mpu_type_packet_header.mmtp_packet_id,
 			mpu_type_packet->mmtp_mpu_type_packet_header.mpu_sequence_number,
 
-			reassembled_mpu_final->i_buffer, t, p_track->p_es,
-			isobmff_parameters->mpu_fragments_p_root_box,
+			reassembled_mpu_final->i_buffer, t/1000000,
 			mpu_type_packet->mpu_data_unit_payload_fragments_timed.sample_number,
 			mpu_type_packet->mpu_data_unit_payload_fragments_timed.offset,
 			mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type,
@@ -1194,7 +1203,7 @@ void createTracksFromMpuMetadata(demux_t *p_obj, mmtp_sub_flow_t* mmtp_sub_flow)
 
     mpu_isobmff_fragment_parameters_t *isobmff_parameters = &mmtp_sub_flow->mpu_fragments->mpu_isobmff_fragment_parameters;
 
-	__LOG_INFO(p_obj, "%d:createTracksFromMpuMetadata", __LINE__);
+    __LOG_DEBUG(p_obj, "%d:createTracksFromMpuMetadata", __LINE__);
 
     p_mvhd = MP4_BoxGet( isobmff_parameters->mpu_fragments_p_moov, "mvhd" );
 
