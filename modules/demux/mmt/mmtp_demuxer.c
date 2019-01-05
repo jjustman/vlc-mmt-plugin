@@ -2,10 +2,57 @@
  * mmtp_demuxer.c : mmtp demuxer for ngbp
  *****************************************************************************
  *
+ * a sample MMT ISO-23008-1 de-muxer/de-encapsulator for live MMT video playback in VLC
+ * uses MFU re-assembly for delivery to hevc and audio decoder. allows playback of
+ * ATSC 3.0 live video streams via mulicast-udp for NGBP.
  *
  * Author: jason@jasonjustman.com
  *
- * 2018-12-21
+ * TODO:
+ *
+ * 	MMT spec scope:
+ *
+ * 		- add in base signaling implementation for PA table processing,
+ * 			- support packet_id selection via consuming MPT table messages rather than building es streams for all packet_id
+ *		- reduce "observed" jitter by using timestamp (short-format NTP) of packet payload for es block PTS + jitter buffer time
+ *		- NRT asset support to object on disk
+ *		- GFD support to object on disk
+ *		- overlay text support for diagnostics:
+ *			- mmt packet_id v/a identification
+ *			- mmt packet loss, e.g. via packet_counter gaps
+ *			- missing fragments
+ *			- decoder errors
+ *			- avg bitrate, etc
+ *			- PA messages
+ *
+ *
+ *		- refactor out main MMT processing into standalone libmmt project
+ *			- add in interface hooks and mappipngs from VLC to libmmt other players/platforms/connected devices/tv's etc
+ *
+ *	ATSC 3.0/331
+ *		- add in default LLS (low-level-signaling) SLT (service list table) listening to:
+ *			LLS shall be transported in IP packets with address 224.0.23.60 and destination port 4937/udp.1
+ *		- provide channel selection via SLT table or
+ *		- use SystemTime instead of local clock time
+ *
+ *		-add in SLS (See section 7.2/7.3/7.4)
+ *			via USBD/USD – User Service Bundle Description / User Service Description
+ *
+ *
+ *			MMTP session carries MMTP-specific signaling messages specific to its session or each asset delivered by the MMTP session.
+The following MMTP messages shall be delivered by the MMTP session signaled in the SLT:
+• MMT Package Table (MPT) message: This message carries an MP (MMT Package) table which contains the list of all Assets and their location information as specified in subclause 10.3.4 of ISO/IEC 23008-1) [37].
+• MMT ATSC3 (MA3) message mmt_atsc3_message(): This message carries system metadata specific for ATSC 3.0 services including Service Layer Signaling as specified in Section 7.2.3.1.
+The following MMTP messages shall be delivered by the MMTP session signaled in the SLT, if required:
+• Media Presentation Information (MPI) message: This message carries an MPI table which contains the whole document or a subset of a document of presentation information. An MP table associated with the MPI table also can be delivered by this message (see subclause 10.3.3 of ISO/IEC 23008-1) [37];
+ *
+ *
+ *	ATSC 3.0/332
+ *
+ *		- Consume Service Fragments for on-screen EPG
+ *
+ * genesis: 2018-12-21
+ *
  *
  *
  *  MMTP Packet V=0
@@ -376,14 +423,7 @@ static int  ProbeFragments( demux_t *p_demux, mpu_isobmff_fragment_parameters_t*
 /*
  * Initializes the MMTP demuxer
  *
- *
- * 	read the first 32 bits to parse out version, packet_type and packet_id
- * 		if we think this is an MMPT packet, then wire up Demux and Control callbacks
- *
- *
- * TODO:  add mutex in p_demux->p_sys
- *
- * setup mp4 demux thread, wait till we actually have udp data before completing probing
+ * set some default values and init our mmtp sub flow vector for re-assembly
  */
 
 static int Open( vlc_object_t * p_this )
@@ -424,6 +464,8 @@ static int Open( vlc_object_t * p_this )
 
 /**
  * Destroys the MMTP-demuxer
+ *
+ * todo: clear our re-assembly vectors
  */
 static void Close( vlc_object_t *p_this )
 {
@@ -441,38 +483,11 @@ static void Close( vlc_object_t *p_this )
 
 /**
  *
- * Un-encapsulate MMTP into type,
- * 	0x00 -> process payload as MPU, re-constituting MFU accordingly
- *
- *
- *
- *
-     * dont rely on stream read, use vlc_stream_block for
-    block_t *block = block_Alloc( MAX_UDP_BLOCKSIZE );
-    if( unlikely(block == NULL) )
-        return -1;
-
-    int rd = vlc_stream_Read( p_demux->s, block->p_buffer, MAX_UDP_BLOCKSIZE );
-    if ( rd <= 0 )
-    {
-        block_Release( block );
-        return rd;
-    }
-    block->i_buffer = rd;
-
-    size_t wr = sout_AccessOutWrite( out, block );
-    if( wr != (size_t)rd )
-    {
-        msg_Err( p_demux, "cannot write data" );
-        return -1;
-    }
-    return 1;
-
-    **/
-//messy
-/**
- *
  * mmtp demuxer,
+ * 	rebuild UDP packets into one MFU packet, push to es for output
+ *
+ * 	todo:
+ * 		decode
  *
  * use p_sys->s for udp,
  * use p_sys->s_frag for fragmented mp4 demux / decoding
@@ -1180,13 +1195,13 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 
 		//todo, re-sequence these by fragmentation_counter DESC,
 		block_t* reassembled_mpu_final = block_ChainGather(first);
-		int samples_missing =  first_fragment_counter - last_fragment_counter - total_sample_count;
+		int samples_missing =  first_fragment_counter - last_fragment_counter - total_sample_count + 1;
 
-		__LOG_INFO2(p_obj, "%d:REASSEMBLE METRICS: started with first fragment of du: %c (fragment_count #: %d), ended with last fragment of du %c (fragment_count #: %d), samples count: %d (missing: %d)",
+		__LOG_INFO2(p_obj, "%d:REASSEMBLE METRICS: samples present count: %d, starting w/ first fragment: %c, start fragment #: %d, ending w/ last fragment: %c, end fragment #: %d, missing: %d",
 					__LINE__,
-					started_with_first_fragment_of_du ? 't':'f', first_fragment_counter,
-					ended_with_last_fragment_of_du ? 't' : 'f', last_fragment_counter,
 					total_sample_count,
+					started_with_first_fragment_of_du ? 'T':'F', first_fragment_counter,
+					ended_with_last_fragment_of_du ? 'T' : 'F', last_fragment_counter,
 					samples_missing);
 
 		if(!started_with_first_fragment_of_du || !ended_with_last_fragment_of_du || samples_missing > 5) {
@@ -1872,6 +1887,7 @@ static int TrackCreateES( demux_t *p_demux, mmtp_sub_flow_t* mmtp_sub_flow, mp4_
 			if(!p_sys->f_fps) {
 				p_sys->f_fps = 60000.0/1001.0;
 			}
+
 
 	        __LOG_INFO(p_demux, "%d:MP4_TrackSetup, framerate is: %f",__LINE__, p_sys->f_fps);
 
