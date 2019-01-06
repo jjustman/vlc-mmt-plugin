@@ -21,6 +21,8 @@
 #define __LOG_INFO(...) (msg_Info(__VA_ARGS__))
 #define __LOG_INFO2(...) (msg_Info(__VA_ARGS__))
 
+#define __LOG_MPU_REASSEMBLY(...)
+
 #define __LOG_DEBUG(...)
 //(msg_Info(__VA_ARGS__))
 #define __LOG_TRACE(...)

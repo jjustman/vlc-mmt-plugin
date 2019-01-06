@@ -526,7 +526,7 @@ static int BossCallback(vlc_object_t *p_this, const char *psz_var,
 
 - (void)resetAtoB
 {
-    msg_Dbg(getIntf(), "Resetting A to B values");
+//    msg_Dbg(getIntf(), "Resetting A to B values");
     timeA = 0;
     timeB = 0;
 }
