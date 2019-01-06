@@ -66,8 +66,9 @@ void print_substring(const uint8_t *str, int skip, int tail)
 
 void dump_xml_string(struct xml_string *node) {
 
-	printf("dump_xml_string::xml_string: len: %d, is_self_closing: %i, val: ", node->length, node->is_self_closing_tag);
+	printf("%d:dump_xml_string::xml_string: len: %d, is_self_closing: %i, val: |", __LINE__, node->length, node->is_self_closing_tag);
 	print_substring(node->buffer, 0, node->length);
+	printf("|");
 
 	if(node->attributes && node->attributes->length) {
 		printf(", attributes len: %d, val: ", node->attributes->length);
@@ -427,9 +428,9 @@ static struct xml_string* xml_parse_tag_end(struct xml_parser* parser) {
 			//start processing attributes if we have a space in the tag
 
 			start_name_length = length;
-			attribute_start = length;
+			attribute_start = start_name_start + start_name_length + 1; //chomp our opening space
 		} if(attribute_start != -1) {
-			attribute_len = length;
+			attribute_len = length - start_name_length;
 		}
 		xml_parser_consume(parser, 1);
 		length++;
@@ -459,10 +460,10 @@ static struct xml_string* xml_parse_tag_end(struct xml_parser* parser) {
 		name->buffer = &parser->buffer[start_name_start];
 		name->length = start_name_length;
 		name->is_self_closing_tag = last_char == '/';
-printf("***** %d, len: %d", attribute_start, attribute_len);
+		printf("***** %d, len: %d", attribute_start, attribute_len);
 		if(attribute_start != -1 && attribute_len) {
-			name->attributes->buffer = &parser->buffer[start_name_start + start_name_length + attribute_start - 1];
-			name->attributes->length = (int)(attribute_len - attribute_start - start_name_length) < 0 ? 0 : (attribute_len  - attribute_start - start_name_length+1 );
+			name->attributes->buffer = &parser->buffer[attribute_start];
+			name->attributes->length = name->is_self_closing_tag ? attribute_len -1 : attribute_len;
 
 		}
 	}
