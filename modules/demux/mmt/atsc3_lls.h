@@ -70,6 +70,8 @@ See Annex F Sec. 6.4 Sec. 6.5 Sec. 6.6
  */
 
 typedef struct llt_xml_payload {
+	uint8_t *xml_payload_compressed;
+	uint xml_payload_compressed_size;
 	uint8_t *xml_payload;
 	uint xml_payload_size;
 
@@ -105,135 +107,10 @@ typedef struct lls_table {
 
 } lls_table_t;
 
-lls_table_t* lls_create_base_table(uint8_t* lls, int size) {
-
-	lls_table_t *base_table = calloc(1, sizeof(lls_table_t));
-
-	//read first 32 bytes in
-	base_table->lls_table_id = lls[0];
-	base_table->lls_group_id = lls[1];
-	base_table->group_count_minus1 = lls[2];
-	base_table->lls_table_version = lls[3];
-
-	int remaining_payload_size = (size > 65531) ? 65531 : size;
-
-	uint8_t *temp_gzip_payload = calloc(size, sizeof(uint8_t));
-	FILE *f = fopen("slt.gz", "w");
-
-	for(int i=4; i < remaining_payload_size; i++) {
-		//printf("i:0x%x ", lls[i]);
-		//fwrite(&lls[i], 1, 1, f);
-		temp_gzip_payload[i-4] = lls[i];
-	}
-	base_table->raw_xml.xml_payload = temp_gzip_payload;
-	base_table->raw_xml.xml_payload_size = remaining_payload_size -4;
-
-	printf("first 4 hex: 0x%x 0x%x 0x%x 0x%x", temp_gzip_payload[0], temp_gzip_payload[1], temp_gzip_payload[2], temp_gzip_payload[3]);
-	//remainder of playload is gzip'd, so read until size
-
-	return base_table;
-}
-
-void lls_dump_base_table(lls_table_t *base_table) {
-	println("base table:");
-	println("-----------");
-	println("lls_table_id:			%d	(0x%x)", base_table->lls_table_id, base_table->lls_table_id);
-	println("lls_group_id: 			%d	(0x%x)", base_table->lls_group_id, base_table->lls_group_id);
-	println("group_count_minus1: 	%d	(0x%x)", base_table->group_count_minus1, base_table->group_count_minus1);
-	println("lls_table_version:%d	(0x%x)", base_table->lls_table_version, base_table->lls_table_version);
-	println("(anon) xml payload : size %d", 	base_table->raw_xml.xml_payload_size);
-
-}
-
-/**
- * footnote 5
- * The maximum size of the IP datagram is 65,535 bytes.
- * The maximum UDP data payload is 65,535 minus 20 bytes for the IP header minus 8 bytes for the UDP header.
- */
-
-#define GZIP_CHUNK_INPUT_SIZE_MAX 65507
-#define GZIP_CHUNK_INPUT_READ_SIZE 1024
-#define GZIP_CHUNK_OUTPUT_BUFFER_SIZE 1024*8
-
-int unzip_gzip_payload(uint8_t *input_payload, uint input_payload_size, uint8_t **decompressed_payload) {
-
-	if(input_payload_size > GZIP_CHUNK_INPUT_SIZE_MAX) return -1;
-
-	uint input_payload_offset = 0;
-	uint output_payload_offset = 0;
-    unsigned char *output_payload = NULL;
-
-    int ret;
-    unsigned have;
-    z_stream strm;
 
 
-    uint8_t *decompressed;
+lls_table_t* lls_create_base_table( uint8_t* lls, int size);
 
-    strm.zalloc = Z_NULL;
-	strm.zfree = Z_NULL;
-	strm.opaque = Z_NULL;
-	strm.avail_in = 0;
-	strm.next_in = Z_NULL;
-	strm.data_type = Z_TEXT;
-
-	//treat this input_payload as gzip not just delfate
-	ret = inflateInit2(&strm, 16+MAX_WBITS);
-
-	if (ret != Z_OK)
-	   return ret;
-
-	do {
-
-		strm.next_in = &input_payload[input_payload_offset];
-
-		uint payload_chunk_size = input_payload_size - input_payload_offset > GZIP_CHUNK_INPUT_READ_SIZE ? GZIP_CHUNK_INPUT_READ_SIZE : input_payload_size - input_payload_offset;
-		strm.avail_in = payload_chunk_size;
-
-		if (strm.avail_in <= 0)
-			break;
-
-		do {
-			if(!output_payload) {
-				output_payload = calloc(GZIP_CHUNK_OUTPUT_BUFFER_SIZE + 1, sizeof(uint8_t));
-			} else {
-				output_payload = realloc(output_payload, output_payload_offset + GZIP_CHUNK_OUTPUT_BUFFER_SIZE + 1);
-			}
-
-			if(!output_payload)
-				return -1;
-
-			strm.avail_out = GZIP_CHUNK_OUTPUT_BUFFER_SIZE;
-			strm.next_out = &output_payload[output_payload_offset];
-
-			ret = inflate(&strm, Z_NO_FLUSH);
-
-			//assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
-			switch (ret) {
-				case Z_NEED_DICT:
-					ret = Z_DATA_ERROR;     /* and fall through */
-				case Z_DATA_ERROR:
-				case Z_MEM_ERROR:
-					(void)inflateEnd(&strm);
-				return ret;
-			}
-
-			if(strm.avail_out == 0) {
-				output_payload_offset += GZIP_CHUNK_OUTPUT_BUFFER_SIZE;
-			}
-		} while (strm.avail_out == 0);
-
-		input_payload_offset += GZIP_CHUNK_INPUT_READ_SIZE;
-
-	} while (ret != Z_STREAM_END && input_payload_offset < input_payload_size);
-
-
-	*decompressed_payload = output_payload;
-	/* clean up and return */
-	(void)inflateEnd(&strm);
-	return ret == Z_STREAM_END ? (output_payload_offset + (GZIP_CHUNK_OUTPUT_BUFFER_SIZE - strm.avail_out)) : Z_DATA_ERROR;
-
-}
 /**
  *
  * Raw SLT example:
@@ -286,6 +163,13 @@ Raw SystemTime message:
 
  *
  */
+
+
+lls_table_t* lls_create_xml_table( uint8_t* lls_packet, int size);
+void lls_dump_base_table(lls_table_t *base_table);
+
+
+//etst methods
 
 //slt with packet_id=2
 static char* __get_test_slt()					{ return "010100021f8b08089217185c0003534c5400b5d55b6f82301400e0f7fd0ad2e70d4a41370d609c9ac5448d092ed99ba9d06117685d5bcdfcf73ba8cbe2bc44167d229c4bcfe9f70041ebabc8ad15539a4b1122d7c6c86222912917598896e6fde109b5a2bb201e4c2ca8143a4486664d6a74624b95dd13ecd69b6fc3419ccc5941b5d39ec41dcfe9b29cc3996b07da1c38d341d64cf33444358ca220666ac51366e9edb30f7117631759592e6734dfa5fb5d98afc466547357ca537865059b1685994243413fa4eacca9102c1fc9f2188871b11f433f833ad09b49b5dec6e65299dda8112d5888da93deb0670d8713ab4ce7265e2531fb1c2d8b10955b3f2b49d384ea4d9c6782e64004757aaca49189cc4344ca3edd65da70410d80f617ed34554c831af11a36a9d56c17dbeedfb2d77431866d8067eb00d9582e1518fcf6bb8fc476eb36c165bf1305ce6ef7539ca42a27b98c9354e724b7e53c28dbe324d7e1f4aa727a97717ad539bddb727a6739bdeb70fa5539fdcb38fdea9cfe6d39fdb39cfe15386b18372ee3643a3be2e31ff3e9c52fff7439f8ba1d7121d86e9c76219b0b557329ff34d1dd372e0efb8fce060000";}
