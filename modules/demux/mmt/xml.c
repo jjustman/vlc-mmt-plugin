@@ -69,7 +69,7 @@ void dump_xml_string(struct xml_string *node) {
 	printf("dump_xml_string::xml_string: len: %d, is_self_closing: %i, val: ", node->length, node->is_self_closing_tag);
 	print_substring(node->buffer, 0, node->length);
 
-	if(node->attributes->length) {
+	if(node->attributes && node->attributes->length) {
 		printf(", attributes len: %d, val: ", node->attributes->length);
 		print_substring(node->attributes->buffer, 0, node->attributes->length);
 	}
@@ -160,23 +160,27 @@ static size_t get_zero_terminated_array_elements(struct xml_node** nodes) {
  */
 static _Bool xml_string_equals(struct xml_string* a, struct xml_string* b) {
 
-	printf("__xml_string_equals: a.len: %d, b.len: %d, values:\n", a->length, b->length);
+	printf("%d:xml_string_equals: a.len: %d, b.len: %d, values:\n", __LINE__, a->length, b->length);
 	if (a->length != b->length) {
 		dump_xml_string(a);
 		dump_xml_string(b);
+
+		printf("%d::xml_string_equals - returning false\n", __LINE__);
+
 		return false;
 	}
 
 	size_t i = 0; for (; i < a->length; ++i) {
 		if (a->buffer[i] != b->buffer[i]) {
 			printf(", (%c != %c)", a->buffer[i], b->buffer[i]);
+			printf("%d::xml_string_equals - returning false\n", __LINE__);
 
 			return false;
 		}
 		printf(", (%c == %c)", a->buffer[i], b->buffer[i]);
 
 	}
-
+	printf("\n%d::xml_string_equals - returning true\n", __LINE__);
 	return true;
 }
 
@@ -412,7 +416,7 @@ static struct xml_string* xml_parse_tag_end(struct xml_parser* parser) {
 	 */
 	while (start_name_start + length < parser->length) {
 		current = xml_parser_peek_any(parser, CURRENT_CHARACTER);
-		printf("xml_parse_tag_end::checking %c, hex is: 0x%x, isspace: %d\n", current, current, isspace(current));
+	//	printf("xml_parse_tag_end::checking %c, hex is: 0x%x, isspace: %d\n", current, current, isspace(current));
 
 		 if (('>' == current)) { //end of tag
 					break;
@@ -424,6 +428,8 @@ static struct xml_string* xml_parse_tag_end(struct xml_parser* parser) {
 
 			start_name_length = length;
 			attribute_start = length;
+		} if(attribute_start != -1) {
+			attribute_len = length;
 		}
 		xml_parser_consume(parser, 1);
 		length++;
@@ -453,10 +459,10 @@ static struct xml_string* xml_parse_tag_end(struct xml_parser* parser) {
 		name->buffer = &parser->buffer[start_name_start];
 		name->length = start_name_length;
 		name->is_self_closing_tag = last_char == '/';
-
+printf("***** %d, len: %d", attribute_start, attribute_len);
 		if(attribute_start != -1 && attribute_len) {
-			name->attributes->buffer = &parser->buffer[start_name_start + start_name_length + attribute_start];
-			name->attributes->length = (int)(attribute_len - start_name_length) < 0 ? 0 : (attribute_len - start_name_length);
+			name->attributes->buffer = &parser->buffer[start_name_start + start_name_length + attribute_start - 1];
+			name->attributes->length = (int)(attribute_len - attribute_start - start_name_length) < 0 ? 0 : (attribute_len  - attribute_start - start_name_length+1 );
 
 		}
 	}
@@ -609,7 +615,8 @@ static struct xml_string* xml_parse_content(struct xml_parser* parser) {
  * ---
  */
 static struct xml_node* xml_parse_node(struct xml_parser* parser) {
-	xml_parser_info(parser, "node");
+//	xml_parser_info(parser, "node");
+	printf("%d::xml_parse_node - enter\n", __LINE__);
 
 	/* Setup variables
 	 */
@@ -623,6 +630,8 @@ static struct xml_node* xml_parse_node(struct xml_parser* parser) {
 
 	/* Parse open tag
 	 */
+	printf("%d::xml_parse_node - before xml_parse_tag_open\n", __LINE__);
+
 	tag_open = xml_parse_tag_open(parser);
 	if (!tag_open) {
 		xml_parser_error(parser, NO_CHARACTER, "xml_parse_node::tag_open");
@@ -639,9 +648,13 @@ static struct xml_node* xml_parse_node(struct xml_parser* parser) {
 		goto node_creation;
 	}
 
+	struct xml_node *last_child = NULL;
 	/* If the content does not start with '<', a text content is assumed
 	 */
 	if ('<' != xml_parser_peek(parser, CURRENT_CHARACTER)) {
+
+		printf("%d::xml_parse_node - before xml_parse_content\n", __LINE__);
+
 		content = xml_parse_content(parser);
 
 		if (!content) {
@@ -652,10 +665,11 @@ static struct xml_node* xml_parse_node(struct xml_parser* parser) {
 
 	/* Otherwise children are to be expected
 	 */
-	} else while ('/' != xml_parser_peek(parser, NEXT_CHARACTER)) {
+	} else while ('/' != xml_parser_peek(parser, NEXT_CHARACTER) && (parser->position < parser->length - 2)) {
 
 		/* Parse child node
 		 */
+		printf("%d::xml_parse_node, calling recursive xml_parse_node, pos: %d, len: %d, repeat: %d\n", __LINE__, parser->position, parser->length, (parser->position < parser->length - 3));
 		struct xml_node* child = xml_parse_node(parser);
 		if (!child) {
 			xml_parser_error(parser, NEXT_CHARACTER, "xml_parse_node::child");
@@ -672,29 +686,39 @@ static struct xml_node* xml_parse_node(struct xml_parser* parser) {
 		 */
 		children[new_elements - 1] = child;
 		children[new_elements] = 0;
+
+		last_child = child;
 	}
 
 
 	/* Parse close tag
 	 */
-	tag_close = xml_parse_tag_close(parser);
-	if (!tag_close) {
-		xml_parser_error(parser, NO_CHARACTER, "xml_parse_node::tag_close");
-		goto exit_failure;
+		if(parser->position < parser->length - 2) {
+		printf("%d::xml_parse_node - before xml_parse_tag_close\n", __LINE__);
+
+		tag_close = xml_parse_tag_close(parser);
+		if (!tag_close) {
+			xml_parser_error(parser, NO_CHARACTER, "xml_parse_node::tag_close");
+			goto exit_failure;
+		}
 	}
 
 
 	/* Close tag has to match open tag
 	 */
-	if (!xml_string_equals(tag_open, tag_close)) {
-		xml_parser_error(parser, NO_CHARACTER, "xml_parse_node::tag missmatch");
-		goto exit_failure;
-	}
+	printf("%d::xml_parse_node - before xml_string_equals: tag_open: %p, tag_closed: %p\n", __LINE__, tag_open, tag_close);
 
+	if(tag_open && tag_close) {
+		if (!xml_string_equals(tag_open, tag_close)) {
+			xml_parser_error(parser, NO_CHARACTER, "xml_parse_node::tag missmatch");
+			goto exit_failure;
+		}
+	}
 
 	/* Return parsed node
 	 */
-	xml_string_free(tag_close);
+	if(tag_close)
+		xml_string_free(tag_close);
 
 node_creation:;
 	struct xml_node* node = malloc(sizeof(struct xml_node));
@@ -753,6 +777,8 @@ struct xml_document* xml_parse_document(uint8_t* buffer, size_t length) {
 
 	/* Parse the root node
 	 */
+	printf("%d::xml_parse_document - enter", __LINE__);
+
 	struct xml_node* root = xml_parse_node(&parser);
 	if (!root) {
 		xml_parser_error(&parser, NO_CHARACTER, "xml_parse_document::parsing document failed");
