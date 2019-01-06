@@ -1,0 +1,2 @@
+atsc3_lls: atsc3_lls.h atsc3_lls.c
+	   cc -g atsc3_lls.c -o atsc3_lls -lz

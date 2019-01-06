@@ -456,16 +456,16 @@ static int vlc_key_to_action (vlc_object_t *obj, const char *varname, vlc_value_
     uint32_t keycode = curkey.i_int;
     msg_Dbg(obj, "%d:key_to_action, keycode: %u", __LINE__, keycode);
 
-    vlc_object_t *my_object_ref;
+    vlc_object_t *my_object_ref = d;
 
+ //   vlc_object_t *my_object_ref = obj;
 
     switch(keycode) {
 
     	case 105:
 
     		activate_info_subtitle(my_object_ref);
-    		//vlc_object_find_name(obj, "")
-    		//vlc_object_find_name
+
 //    		filter_chain_t *p_chain;
 //			filter_owner_t owner;
 //			memset(&owner, 0, sizeof(owner));
@@ -1045,6 +1045,7 @@ static int Control( demux_t *p_demux, int i_query, va_list args )
  */
 
 //mpu_type_packet->mmtp_mpu_type_packet_header.
+
 void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_payload_fragments_union_t* mpu_type_packet) {
 
     mpu_isobmff_fragment_parameters_t *isobmff_parameters = &mmtp_sub_flow->mpu_fragments->mpu_isobmff_fragment_parameters;
@@ -1094,6 +1095,9 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 		    __LOG_DEBUG(p_obj, "%d:processMpuPacket - createTracksFromMpuMetadata, !p_root_box", __LINE__ );
 
 			createTracksFromMpuMetadata(p_obj, mmtp_sub_flow);
+			if( isobmff_parameters->track[0].fmt.i_cat == VIDEO_ES ) {
+				__VIDEO_OUTPUT_ES_FORMAT = &isobmff_parameters->track[0].fmt;
+			}
 
 		    vlc_stream_Delete(tmp_mpu_fragment_stream);
 

@@ -8,6 +8,13 @@
 #ifndef MODULES_DEMUX_MMT_ASTC3_LLS_H_
 #define MODULES_DEMUX_MMT_ASTC3_LLS_H_
 
+#include <stdlib.h>
+#include <stdio.h>
+#include "zlib.h"
+
+
+#define println(...) printf(__VA_ARGS__);printf("\n")
+
 /***
  * From < A/331 2017 - Signaling Delivery Sync > https://www.atsc.org/wp-content/uploads/2017/12/A331-2017-Signaling-Deivery-Sync-FEC-3.pdf
  * LLS shall be transported in IP packets with address:
@@ -61,26 +68,144 @@ See Annex F Sec. 6.4 Sec. 6.5 Sec. 6.6
  *
  */
 
+typedef struct llt_xml_payload {
+	uint8_t *xml_payload;
+	uint xml_payload_size;
+
+
+} lls_xml_payload_t;
+
+typedef struct lls_xml_payload {
+
+} slt_table_t;
+
+typedef struct lls_xml_payload rrt_table_t;
+typedef struct lls_xml_payload system_time_table_t;
+typedef struct lls_xml_payload aeat_table_t;
+typedef struct lls_xml_payload on_screen_message_notification_t;
+typedef struct lls_xml_payload lls_reserved_table_t;
+
 typedef struct lls_table {
 	uint8_t	lls_table_id;
-	uint8_t	lls_group_iod;
+	uint8_t	lls_group_id;
+	uint8_t group_count_minus1;
 	uint8_t	lls_table_version;
+	lls_xml_payload_t					raw_xml;
 
 	union {
+
 		slt_table_t							slt_table;
 		rrt_table_t							rrt_table;
 		system_time_table_t					system_time_table;
 		aeat_table_t						aeat_table;
 		on_screen_message_notification_t	on_screen_message_notification;
-		llt_reserved_table_t				reserved;
+		lls_reserved_table_t				lls_reserved_table;
 	};
 
 } lls_table_t;
 
-lls_table_t create_llt_base_table() {
+lls_table_t* lls_create_base_table(uint8_t* lls, int size) {
+
+	lls_table_t *base_table = calloc(1, sizeof(lls_table_t));
+
+	//read first 32 bytes in
+	base_table->lls_table_id = lls[0];
+	base_table->lls_group_id = lls[1];
+	base_table->group_count_minus1 = lls[2];
+	base_table->lls_table_version = lls[3];
+
+	int remaining_payload_size = (size > 65531) ? 65531 : size;
+
+	uint8_t *temp_gzip_payload = calloc(size, sizeof(uint8_t));
+	FILE *f = fopen("slt.gz", "w");
+
+	for(int i=4; i < remaining_payload_size; i++) {
+		printf("i:0x%x ", lls[i]);
+		fwrite(&lls[i], 1, 1, f);
+		temp_gzip_payload[i-4] = lls[i];
+	}
+	base_table->raw_xml.xml_payload = temp_gzip_payload;
+	base_table->raw_xml.xml_payload_size = remaining_payload_size -4;
+
+	printf("first 4 hex: 0x%x 0x%x 0x%x 0x%x", temp_gzip_payload[0], temp_gzip_payload[1], temp_gzip_payload[2], temp_gzip_payload[3]);
+	//remainder of playload is gzip'd, so read until size
+
+	return base_table;
+}
+
+void lls_dump_base_table(lls_table_t *base_table) {
+	println("base table:");
+	println("-----------");
+	println("lls_table_id:			%d	(0x%x)", base_table->lls_table_id, base_table->lls_table_id);
+	println("lls_group_id: 			%d	(0x%x)", base_table->lls_group_id, base_table->lls_group_id);
+	println("group_count_minus1: 	%d	(0x%x)", base_table->group_count_minus1, base_table->group_count_minus1);
+	println("lls_table_version:%d	(0x%x)", base_table->lls_table_version, base_table->lls_table_version);
+	println("(anon) xml payload : size %d", 	base_table->raw_xml.xml_payload_size);
 
 }
 
+#define CHUNK 8192
+
+int unzip_gzip_payload(uint8_t *payload, uint payload_size) {
+
+    int ret;
+    unsigned have;
+    z_stream strm;
+    unsigned char in[CHUNK];
+    unsigned char out[CHUNK];
+
+    strm.zalloc = Z_NULL;
+	strm.zfree = Z_NULL;
+	strm.opaque = Z_NULL;
+	strm.avail_in = 0;
+	strm.next_in = Z_NULL;
+	ret = inflateInit(&strm);
+
+	if (ret != Z_OK)
+	   return ret;
+
+
+	do {
+		strm.avail_in = payload_size;
+//		if (ferror(source)) {
+//			(void)inflateEnd(&strm);
+//			return Z_ERRNO;
+//		}
+		if (strm.avail_in == 0)
+			break;
+		strm.next_in = payload;
+
+		do {
+			strm.avail_out = CHUNK;
+			strm.next_out = out;
+
+			ret = inflate(&strm, Z_NO_FLUSH);
+			//assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
+			switch (ret) {
+				case Z_NEED_DICT:
+					ret = Z_DATA_ERROR;     /* and fall through */
+				case Z_DATA_ERROR:
+				case Z_MEM_ERROR:
+					(void)inflateEnd(&strm);
+				return ret;
+			}
+
+			have = CHUNK - strm.avail_out;
+			for(int i=0; i < have; i++)
+				printf("%c", out[i]);
+//			if (fwrite(out, 1, have, dest) != have || ferror(dest)) {
+//				(void)inflateEnd(&strm);
+			return Z_ERRNO;
+
+		} while (strm.avail_out == 0);
+	} while (ret != Z_STREAM_END);
+
+
+	/* clean up and return */
+	(void)inflateEnd(&strm);
+	return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
+
+}
 /**
  *
  * Raw SLT example:
@@ -135,9 +260,9 @@ Raw SystemTime message:
  */
 
 //slt with packet_id=2
-static string __get_test_slt()					{ return "010100021f8b08089217185c0003534c5400b5d55b6f82301400e0f7fd0ad2e70d4a41370d609c9ac5448d092ed99ba9d06117685d5bcdfcf73ba8cbe2bc44167d229c4bcfe9f70041ebabc8ad15539a4b1122d7c6c86222912917598896e6fde109b5a2bb201e4c2ca8143a4486664d6a74624b95dd13ecd69b6fc3419ccc5941b5d39ec41dcfe9b29cc3996b07da1c38d341d64cf33444358ca220666ac51366e9edb30f7117631759592e6734dfa5fb5d98afc466547357ca537865059b1685994243413fa4eacca9102c1fc9f2188871b11f433f833ad09b49b5dec6e65299dda8112d5888da93deb0670d8713ab4ce7265e2531fb1c2d8b10955b3f2b49d384ea4d9c6782e64004757aaca49189cc4344ca3edd65da70410d80f617ed34554c831af11a36a9d56c17dbeedfb2d77431866d8067eb00d9582e1518fcf6bb8fc476eb36c165bf1305ce6ef7539ca42a27b98c9354e724b7e53c28dbe324d7e1f4aa727a97717ad539bddb727a6739bdeb70fa5539fdcb38fdea9cfe6d39fdb39cfe15386b18372ee3643a3be2e31ff3e9c52fff7439f8ba1d7121d86e9c76219b0b557329ff34d1dd372e0efb8fce060000"; ]s
+static char* __get_test_slt()					{ return "010100021f8b08089217185c0003534c5400b5d55b6f82301400e0f7fd0ad2e70d4a41370d609c9ac5448d092ed99ba9d06117685d5bcdfcf73ba8cbe2bc44167d229c4bcfe9f70041ebabc8ad15539a4b1122d7c6c86222912917598896e6fde109b5a2bb201e4c2ca8143a4486664d6a74624b95dd13ecd69b6fc3419ccc5941b5d39ec41dcfe9b29cc3996b07da1c38d341d64cf33444358ca220666ac51366e9edb30f7117631759592e6734dfa5fb5d98afc466547357ca537865059b1685994243413fa4eacca9102c1fc9f2188871b11f433f833ad09b49b5dec6e65299dda8112d5888da93deb0670d8713ab4ce7265e2531fb1c2d8b10955b3f2b49d384ea4d9c6782e64004757aaca49189cc4344ca3edd65da70410d80f617ed34554c831af11a36a9d56c17dbeedfb2d77431866d8067eb00d9582e1518fcf6bb8fc476eb36c165bf1305ce6ef7539ca42a27b98c9354e724b7e53c28dbe324d7e1f4aa727a97717ad539bddb727a6739bdeb70fa5539fdcb38fdea9cfe6d39fdb39cfe15386b18372ee3643a3be2e31ff3e9c52fff7439f8ba1d7121d86e9c76219b0b557329ff34d1dd372e0efb8fce060000";}
 //system_time_message with packet_id=1
-static string __get_test_system_time_message()	{ return "030100011f8b08089717185c000353797374656d54696d6500358dcb0a82401440f77ec570f77a0b89227c10151428056350cb61bc3e601cc3b966fe7d6eda1e38e744e9b733e243836b7b1bc33a588120abfbb2b5750c2357fe0ed2c48be4ec98baa2ed482c82753134ccef3de2344d8162a7837ea8f199675237d4298787421e433c916997f88cf2258b6b7ec6658020f4380c64f9c1fa56558e3886700b62649df55a993ff3efc5e602a27492158fcbb252c61160e2fd003518c11fb6000000";
+static char* __get_test_system_time_message()	{ return "030100011f8b08089717185c000353797374656d54696d6500358dcb0a82401440f77ec570f77a0b89227c10151428056350cb61bc3e601cc3b966fe7d6eda1e38e744e9b733e243836b7b1bc33a588120abfbb2b5750c2357fe0ed2c48be4ec98baa2ed482c82753134ccef3de2344d8162a7837ea8f199675237d4298787421e433c916997f88cf2258b6b7ec6658020f4380c64f9c1fa56558e3886700b62649df55a993ff3efc5e602a27492158fcbb252c61160e2fd003518c11fb6000000"; }
 
 
 

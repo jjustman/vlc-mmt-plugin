@@ -6,6 +6,36 @@
 
 #include "atsc3_lls.h"
 
+#define __UNIT_TEST 1
+
+#ifdef __UNIT_TEST
+
+int main() {
+
+	char* test_payload_base64;
+
+	test_payload_base64 = __get_test_slt();
+	int test_payload_base64_length = strlen(test_payload_base64);
+	int test_payload_binary_size = test_payload_base64_length/2;
+
+	uint8_t *test_payload_binary = calloc(test_payload_binary_size, sizeof(uint8_t));
+
+	for (size_t count = 0; count < test_payload_binary_size; count++) {
+	        sscanf(test_payload_base64, "%2hhx", &test_payload_binary[count]);
+	        test_payload_base64 += 2;
+	}
+
+	lls_table_t *parsed_table = lls_create_base_table(test_payload_binary, test_payload_binary_size);
+	lls_dump_base_table(parsed_table);
+
+	int ret = unzip_gzip_payload(parsed_table->raw_xml.xml_payload, parsed_table->raw_xml.xml_payload_size);
+	printf("gzip ret is: %d\n", ret);
+	return 0;
+}
+
+
+#endif
+
 
 /** from vlc udp access module **/
 
