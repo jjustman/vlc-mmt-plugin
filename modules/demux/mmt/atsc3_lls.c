@@ -28,8 +28,12 @@ int main() {
 	lls_table_t *parsed_table = lls_create_base_table(test_payload_binary, test_payload_binary_size);
 	lls_dump_base_table(parsed_table);
 
-	int ret = unzip_gzip_payload(parsed_table->raw_xml.xml_payload, parsed_table->raw_xml.xml_payload_size);
-	printf("gzip ret is: %d\n", ret);
+	uint8_t *decompressed_payload;
+	int ret = unzip_gzip_payload(parsed_table->raw_xml.xml_payload, parsed_table->raw_xml.xml_payload_size, &decompressed_payload);
+	//printf("gzip ret is: %d\n", ret);
+	for(int i=0; i < ret; i++) {
+		printf("%c", decompressed_payload[i]);
+	}
 	return 0;
 }
 

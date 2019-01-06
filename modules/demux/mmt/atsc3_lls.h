@@ -8,6 +8,7 @@
 #ifndef MODULES_DEMUX_MMT_ASTC3_LLS_H_
 #define MODULES_DEMUX_MMT_ASTC3_LLS_H_
 
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "zlib.h"
@@ -120,8 +121,8 @@ lls_table_t* lls_create_base_table(uint8_t* lls, int size) {
 	FILE *f = fopen("slt.gz", "w");
 
 	for(int i=4; i < remaining_payload_size; i++) {
-		printf("i:0x%x ", lls[i]);
-		fwrite(&lls[i], 1, 1, f);
+		//printf("i:0x%x ", lls[i]);
+		//fwrite(&lls[i], 1, 1, f);
 		temp_gzip_payload[i-4] = lls[i];
 	}
 	base_table->raw_xml.xml_payload = temp_gzip_payload;
@@ -144,42 +145,69 @@ void lls_dump_base_table(lls_table_t *base_table) {
 
 }
 
-#define CHUNK 8192
+/**
+ * footnote 5
+ * The maximum size of the IP datagram is 65,535 bytes.
+ * The maximum UDP data payload is 65,535 minus 20 bytes for the IP header minus 8 bytes for the UDP header.
+ */
 
-int unzip_gzip_payload(uint8_t *payload, uint payload_size) {
+#define GZIP_CHUNK_INPUT_SIZE_MAX 65507
+#define GZIP_CHUNK_INPUT_READ_SIZE 1024
+#define GZIP_CHUNK_OUTPUT_BUFFER_SIZE 1024*8
+
+int unzip_gzip_payload(uint8_t *input_payload, uint input_payload_size, uint8_t **decompressed_payload) {
+
+	if(input_payload_size > GZIP_CHUNK_INPUT_SIZE_MAX) return -1;
+
+	uint input_payload_offset = 0;
+	uint output_payload_offset = 0;
+    unsigned char *output_payload = NULL;
 
     int ret;
     unsigned have;
     z_stream strm;
-    unsigned char in[CHUNK];
-    unsigned char out[CHUNK];
+
+
+    uint8_t *decompressed;
 
     strm.zalloc = Z_NULL;
 	strm.zfree = Z_NULL;
 	strm.opaque = Z_NULL;
 	strm.avail_in = 0;
 	strm.next_in = Z_NULL;
-	ret = inflateInit(&strm);
+	strm.data_type = Z_TEXT;
+
+	//treat this input_payload as gzip not just delfate
+	ret = inflateInit2(&strm, 16+MAX_WBITS);
 
 	if (ret != Z_OK)
 	   return ret;
 
-
 	do {
-		strm.avail_in = payload_size;
-//		if (ferror(source)) {
-//			(void)inflateEnd(&strm);
-//			return Z_ERRNO;
-//		}
-		if (strm.avail_in == 0)
+
+		strm.next_in = &input_payload[input_payload_offset];
+
+		uint payload_chunk_size = input_payload_size - input_payload_offset > GZIP_CHUNK_INPUT_READ_SIZE ? GZIP_CHUNK_INPUT_READ_SIZE : input_payload_size - input_payload_offset;
+		strm.avail_in = payload_chunk_size;
+
+		if (strm.avail_in <= 0)
 			break;
-		strm.next_in = payload;
 
 		do {
-			strm.avail_out = CHUNK;
-			strm.next_out = out;
+			if(!output_payload) {
+				output_payload = calloc(GZIP_CHUNK_OUTPUT_BUFFER_SIZE + 1, sizeof(uint8_t));
+			} else {
+				output_payload = realloc(output_payload, output_payload_offset + GZIP_CHUNK_OUTPUT_BUFFER_SIZE + 1);
+			}
+
+			if(!output_payload)
+				return -1;
+
+			strm.avail_out = GZIP_CHUNK_OUTPUT_BUFFER_SIZE;
+			strm.next_out = &output_payload[output_payload_offset];
 
 			ret = inflate(&strm, Z_NO_FLUSH);
+
 			//assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
 			switch (ret) {
 				case Z_NEED_DICT:
@@ -190,20 +218,20 @@ int unzip_gzip_payload(uint8_t *payload, uint payload_size) {
 				return ret;
 			}
 
-			have = CHUNK - strm.avail_out;
-			for(int i=0; i < have; i++)
-				printf("%c", out[i]);
-//			if (fwrite(out, 1, have, dest) != have || ferror(dest)) {
-//				(void)inflateEnd(&strm);
-			return Z_ERRNO;
-
+			if(strm.avail_out == 0) {
+				output_payload_offset += GZIP_CHUNK_OUTPUT_BUFFER_SIZE;
+			}
 		} while (strm.avail_out == 0);
-	} while (ret != Z_STREAM_END);
+
+		input_payload_offset += GZIP_CHUNK_INPUT_READ_SIZE;
+
+	} while (ret != Z_STREAM_END && input_payload_offset < input_payload_size);
 
 
+	*decompressed_payload = output_payload;
 	/* clean up and return */
 	(void)inflateEnd(&strm);
-	return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
+	return ret == Z_STREAM_END ? (output_payload_offset + (GZIP_CHUNK_OUTPUT_BUFFER_SIZE - strm.avail_out)) : Z_DATA_ERROR;
 
 }
 /**
