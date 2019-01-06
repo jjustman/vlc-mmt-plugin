@@ -145,17 +145,10 @@ lls_table_t* lls_create_xml_table( uint8_t* lls_packet, int size) {
 	return NULL;
 }
 
-#define __UNIT_TEST 1
-#ifdef __UNIT_TEST
+/***
+ * decompressed l
+ */
 
-int test_lls_create_xml_table(char* base64_payload);
-
-int main() {
-
-	test_lls_create_xml_table(__get_test_slt());
-
-	return 0;
-}
 
 
 
@@ -171,6 +164,23 @@ void lls_dump_base_table(lls_table_t *base_table) {
 	println("---");
 
 }
+
+
+
+#define __UNIT_TEST 1
+#ifdef __UNIT_TEST
+
+int test_lls_create_xml_table(char* base64_payload);
+
+int main() {
+
+	test_lls_create_xml_table(__get_test_slt());
+
+	return 0;
+}
+
+
+
 
 void __create_binary_payload(char *test_payload_base64, uint8_t **binary_payload, int * binary_payload_size) {
 	int test_payload_base64_length = strlen(test_payload_base64);

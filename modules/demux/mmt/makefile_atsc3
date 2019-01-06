@@ -1,2 +1,12 @@
+all: atsc3_lls atsc3_lls_slt_parser_test
+
 atsc3_lls: atsc3_lls.h atsc3_lls.c
 	   cc -g atsc3_lls.c -o atsc3_lls -lz
+	   
+xml.o: xml.c xml.h
+	cc -g -c xml.c 
+		   
+atsc3_lls_slt_parser_test: atsc3_lls_slt_parser_test.c xml.o
+	cc -g atsc3_lls_slt_parser_test.c xml.o -o atsc3_lls_slt_parser_test 
+	
+	
