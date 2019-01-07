@@ -328,7 +328,7 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 	//if we couldn't parse this, just return the empty (0'd collection)
 	if(!equals_count) return collection;
 
-	collection->kvp_collection = (kvp_t**)calloc(equals_count, sizeof(kvp_t*));
+	collection->kvp_collection = (kvp_t**)calloc(equals_count, sizeof(kvp_t));
 	collection->size_n = equals_count;
 
 	quote_depth = 0;
@@ -336,15 +336,11 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 	int token_key_start = 0;
 	int token_val_start = 0;
 
-	collection->kvp_collection[kvp_position] = (kvp_t*)calloc(1, sizeof(kvp_t));
-	kvp_t* current_kvp = collection->kvp_collection[kvp_position];
+	kvp_t* current_kvp = &collection->kvp_collection[kvp_position];
 
 
 	for(int i=1; i < input_len && kvp_position <= equals_count; i++) {
-
-
 		if(isspace(input_string[i]) && !quote_depth) {
-
 			token_key_start = i + 1; //walk forward
 		} else {
 			if(input_string[i] == '"' && input_string[i-1] != '\\') {
@@ -352,15 +348,15 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 					quote_depth--;
 
 					//extract value here
-					kvp_position++;
 					int len = i - token_val_start;
-					current_kvp->val = calloc(len + 1, sizeof(char));
+					current_kvp->val = (char*) calloc(len + 1, sizeof(char*));
 					strncpy(current_kvp->val, &input_string[token_val_start], len);
 					current_kvp->val[len] = '\0';
 
-					printf("%d:parse_kvp_string: marking token_val_start: %d, len: %d\n", __LINE__, token_val_start, len);
-					collection->kvp_collection[kvp_position] = (kvp_t*)calloc(1, sizeof(kvp_t));
-					current_kvp = collection->kvp_collection[kvp_position];
+					printf("%d:parse_kvp_string: (key: %s) marking token_val_start: %d, len: %d\n", __LINE__, current_kvp->key, token_val_start, len);
+
+					//collection->kvp_collection[kvp_position] = (kvp_t*)calloc(1, sizeof(kvp_t*));
+					current_kvp = &collection->kvp_collection[++kvp_position];
 
 
 				} else {
@@ -371,9 +367,13 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 				if(!quote_depth) {
 					//extract key here
 					int len = i - token_key_start;
-					current_kvp->key = calloc(len + 1, sizeof(char));
-					current_kvp->key = strncpy(current_kvp->key, &input_string[token_key_start], len);
+
+					current_kvp->key = (char*)calloc(len + 1, sizeof(char));
+					strncpy(current_kvp->key, &input_string[token_key_start], len);
 					current_kvp->key[len] = '\0';
+
+					printf("%d:parse_kvp_string: marking token_key_start: %d, len: %d, val is: %s\n", __LINE__, token_key_start, len, current_kvp->key);
+
 
 				} else {
 					//ignore it if we are in a quote value
@@ -382,7 +382,7 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 		}
 	}
 
-	printf("%d:kvp_parse_string - size is: %d\n", collection->size_n);
+	printf("%d:kvp_parse_string - size is: %d\n", __LINE__, collection->size_n);
 	return collection;
 
 }
@@ -391,8 +391,8 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 
 kvp_t* kvp_find_key(kvp_collection_t *collection, char* key) {
 	for(int i=0; i < collection->size_n; i++) {
-		kvp_t *check = collection->kvp_collection[i];
-		printf("%d:kvp_find_key: checking: %s against %s\n",__LINE__, check->key, key);
+		kvp_t *check = &collection->kvp_collection[i];
+		printf("%d:kvp_find_key: checking: %s against %s, resolved val is: %s\n",__LINE__, check->key, key, check->val);
 		if(strcasecmp(check->key, key)==0) {
 			return check->val;
 		}
