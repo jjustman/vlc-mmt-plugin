@@ -12,10 +12,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "zlib.h"
-
+#include "xml.h"
 
 #define println(...) printf(__VA_ARGS__);printf("\n")
-
+#define error(...) printf("ERROR:");println(__VA_ARGS__);
 /***
  * From < A/331 2017 - Signaling Delivery Sync > https://www.atsc.org/wp-content/uploads/2017/12/A331-2017-Signaling-Deivery-Sync-FEC-3.pdf
  * LLS shall be transported in IP packets with address:
@@ -78,7 +78,161 @@ typedef struct llt_xml_payload {
 
 } lls_xml_payload_t;
 
+/**
+ *  |SLT|, attributes len: 70, val: xmlns="tag:atsc.org,2016:XMLSchemas/ATSC3/Delivery/SLT/1.0/" bsid="50"
+children: 569:dump_xml_string::xml_string: len: 7, is_self_closing: 0, val: |Service|, attributes len: 172, val: serviceId="1001" globalServiceID="urn:atsc:serviceid:ateme_mmt_1" majorChannelNo="10" minorChannelNo="1" serviceCategory="1" shortServiceName="ATEME MMT 1" sltSvcSeqNum="0"
+69:dump_xml_string::xml_string: len: 21, is_self_closing: 1, val: |BroadcastSvcSignaling|, attributes len: 118, val: slsProtocol="2" slsDestinationIpAddress="239.255.10.1" slsDestinationUdpPort="51001" slsSourceIpAddress="172.16.200.1"
+69:dump_xml_string::xml_string: len: 7, is_self_closing: 0, val: |Service|, attributes len: 172, val: serviceId="1002" globalServiceID="urn:atsc:serviceid:ateme_mmt_2" majorChannelNo="10" minorChannelNo="2" serviceCategory="1" shortServiceName="ATEME MMT 2" sltSvcSeqNum="0"
+69:dump_xml_string::xml_string: len: 21, is_self_closing: 1, val: |BroadcastSvcSignaling|, attributes len: 118, val: slsProtocol="2" slsDestinationIpAddress="239.255.10.2" slsDestinationUdpPort="51002" slsSourceIpAddress="172.16.200.1"
+69:dump_xml_string::xml_string: len: 7, is_self_closing: 0, val: |Service|, attributes len: 172, val: serviceId="1003" globalServiceID="urn:atsc:serviceid:ateme_mmt_3" majorChannelNo="10" minorChannelNo="3" serviceCategory="1" shortServiceName="ATEME MMT 3" sltSvcSeqNum="0"
+69:dump_xml_string::xml_string: len: 21, is_self_closing: 1, val: |BroadcastSvcSignaling|, attributes len: 118, val: slsProtocol="2" slsDestinationIpAddress="239.255.10.3" slsDestinationUdpPort="51003" slsSourceIpAddress="172.16.200.1"
+69:dump_xml_string::xml_string: len: 7, is_self_closing: 0, val: |Service|, attributes len: 172, val: serviceId="1004" globalServiceID="urn:atsc:serviceid:ateme_mmt_4" majorChannelNo="10" minorChannelNo="4" serviceCategory="1" shortServiceName="ATEME MMT 4" sltSvcSeqNum="0"
+69:dump_xml_string::xml_string: len: 21, is_self_closing: 1, val: |BroadcastSvcSignaling|, attributes len: 118, val: slsProtocol="2" slsDestinationIpAddress="239.255.10.4" slsDestinationUdpPort="51004" slsSourceIpAddress="172.16.200.1"
+69:dump_xml_string::xml_string: len: 7, is_self_closing: 0, val: |Service|, attributes len: 117, val: serviceId="5009" globalServiceID="urn:atsc:serviceid:esg" serviceCategory="4" shortServiceName="ESG" sltSvcSeqNum="0"
+69:dump_xml_string::xml_string: len: 21, is_self_closing: 1, val: |BroadcastSvcSignaling|, attributes len: 118, val: slsProtocol="1" slsDestinationIpAddress="239.255.20.9" slsDestinationUdpPort="52009" slsSourceIpAddress="172.16.200.1"
+ */
+
+/*
+ * <SLT xmlns="tag:atsc.org,2016:XMLSchemas/ATSC3/Delivery/SLT/1.0/" bsid="50">
+ *
+ *
+ */
+typedef struct slt_entry {
+	uint bsid; //broadcast stream id
+
+} slt_entry_t;
+
+////todo - refactor out basic NVP/KVP parsing for xml attributes
+typedef struct kvp {
+	char* key;
+	char* val;
+} kvp_t;
+
+typedef struct kvp_collection {
+	kvp_t **kvp_collection;
+	int 	size_n;
+} kvp_collection_t;
+
+kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
+	int input_len = strlen(input_string);
+	kvp_collection_t *collection = calloc(1, sizeof(kvp_collection_t));
+
+	//a= is not valid, must be at least 3 chars
+	//return an empty collection
+	if(input_len < 3)
+			return collection;
+
+	//find out how many ='s we have, as that will tell us how many kvp_t entries to create
+	//first position can never be =
+	int quote_depth = 0;
+	int equals_count = 0;
+	for(int i=1; i < input_len; i++) {
+		if(input_string[i] == '"') {
+			if(quote_depth)
+				quote_depth--;
+			else
+				quote_depth++;
+		} else if(input_string[i] == '=') {
+			if(!quote_depth)
+				equals_count++;
+		}
+	}
+
+	printf("%d:parse_kvp_string: creating %d entries", __LINE__, equals_count);
+	equals_count = equals_count < 0 ? 0 : equals_count;
+
+	//if we couldn't parse this, just return the empty (0'd collection)
+	if(!equals_count) return collection;
+
+	collection->kvp_collection = calloc(equals_count, sizeof(kvp_t));
+	quote_depth = 0;
+	int kvp_position = 0;
+	int token_key_start = 0;
+	int token_val_start = 0;
+
+	kvp_t* current_kvp = collection->kvp_collection[kvp_position++];
+	collection->size_n = equals_count;
+
+	for(int i=1; i < input_len && kvp_position <= equals_count; i++) {
+		if(isspace(input_string[i]) && !quote_depth) {
+
+			token_key_start = i + 1; //walk forward
+		} else {
+			if(input_string[i] == '"' && input_string[i-1] != '\\') {
+				if(quote_depth) {
+					quote_depth--;
+
+					//extract value here
+					kvp_position++;
+					int len = i - 1 - token_val_start;
+					current_kvp->val = calloc(len + 1, sizeof(char));
+					current_kvp->val = strncpy(&current_kvp->val, &input_string[token_val_start], len);
+
+					current_kvp = collection->kvp_collection[kvp_position];
+				} else {
+					quote_depth++;
+					token_val_start = i + 1;
+				}
+			} else if(input_string[i] == '=') {
+				if(!quote_depth) {
+					//extract key here
+					int len = i - 1 - token_key_start;
+					current_kvp->key = calloc(len + 1, sizeof(char));
+					current_kvp->key = strncpy(&current_kvp->key, &input_string[token_key_start], len);
+
+				} else {
+					//ignore it if we are in a quote value
+				}
+			}
+		}
+	}
+
+}
+
+kvp_t* kvp_find_key(kvp_collection_t *collection, char* key)) {
+	for(int i=0; i < collection->size_n; i++) {
+		kvp_t check = collection->kvp_collection[i];
+		if(strncmp(check->key, ))
+	}
+}
+
+
+
+
+/*
+ *       <BroadcastSvcSignaling slsProtocol="2" slsDestinationIpAddress="239.255.10.1" slsDestinationUdpPort="51001" slsSourceIpAddress="172.16.200.1" />
+ *
+ *
+ *       0..1
+ */
+
+typedef struct broadcast_svc_signaling {
+	int 	sls_protocol;
+	char*	sls_destination_ip_address;
+	char*	sls_destination_udp_port;
+	char*	sls_source_ip_address;
+
+} broadcast_svc_signaling_t;
+/*
+ *    <Service serviceId="1001" globalServiceID="urn:atsc:serviceid:ateme_mmt_1" majorChannelNo="10" minorChannelNo="1" serviceCategory="1" shortServiceName="ATEME MMT 1" sltSvcSeqNum="0">
+ *
+ */
+typedef struct service {
+	uint	service_id;
+	char*	global_service_id;
+	uint	major_channel_no;
+	uint 	minor_channel_no;
+	uint	service_category;
+	char*	short_service_name;
+	uint8_t slt_svc_seq_num;  //Version of SLT service info for this service.
+} service_t;
+
+
 typedef struct lls_xml_payload {
+	int**		bsid;			//list
+	int			bsid_n;
+	service_t**	service_entry; 	//list
+	int			service_entry_n;
 
 } slt_table_t;
 
@@ -88,11 +242,20 @@ typedef struct lls_xml_payload aeat_table_t;
 typedef struct lls_xml_payload on_screen_message_notification_t;
 typedef struct lls_xml_payload lls_reserved_table_t;
 
+typedef enum {
+	SLT = 1,
+	RRT,
+	SystemTime,
+	AEAT,
+	OnscreenMessageNotification,
+	RESERVED
+};
+
 typedef struct lls_table {
-	uint8_t	lls_table_id;
-	uint8_t	lls_group_id;
-	uint8_t group_count_minus1;
-	uint8_t	lls_table_version;
+	uint8_t								lls_table_id; //map via lls_table_id_type;
+	uint8_t								lls_group_id;
+	uint8_t 							group_count_minus1;
+	uint8_t								lls_table_version;
 	lls_xml_payload_t					raw_xml;
 
 	union {
@@ -161,20 +324,21 @@ Raw SystemTime message:
 00d0   f3 ef c5 e6 02 a2 74 92 15 8f cb b2 52 c6 11 60   óïÅæ.¢t...Ë²RÆ.`
 00e0   e2 fd 00 35 18 c1 1f b6 00 00 00                  âý.5.Á.¶...
 
+see atsc3_lls_test.c for base64 string getters of test payloads
  *
  */
 
 
 lls_table_t* lls_create_xml_table( uint8_t* lls_packet, int size);
-void lls_dump_base_table(lls_table_t *base_table);
+lls_table_t* lls_create_table( uint8_t* lls_packet, int size);
 
-
+void lls_dump_instance_table(lls_table_t *base_table);
+xml_node_t* parse_xml_payload(uint8_t* xml, int xml_size);
+int process_xml_payload(lls_table_t* lls_table, xml_node_t* xml_node);
 //etst methods
 
-//slt with packet_id=2
-static char* __get_test_slt()					{ return "010100021f8b08089217185c0003534c5400b5d55b6f82301400e0f7fd0ad2e70d4a41370d609c9ac5448d092ed99ba9d06117685d5bcdfcf73ba8cbe2bc44167d229c4bcfe9f70041ebabc8ad15539a4b1122d7c6c86222912917598896e6fde109b5a2bb201e4c2ca8143a4486664d6a74624b95dd13ecd69b6fc3419ccc5941b5d39ec41dcfe9b29cc3996b07da1c38d341d64cf33444358ca220666ac51366e9edb30f7117631759592e6734dfa5fb5d98afc466547357ca537865059b1685994243413fa4eacca9102c1fc9f2188871b11f433f833ad09b49b5dec6e65299dda8112d5888da93deb0670d8713ab4ce7265e2531fb1c2d8b10955b3f2b49d384ea4d9c6782e64004757aaca49189cc4344ca3edd65da70410d80f617ed34554c831af11a36a9d56c17dbeedfb2d77431866d8067eb00d9582e1518fcf6bb8fc476eb36c165bf1305ce6ef7539ca42a27b98c9354e724b7e53c28dbe324d7e1f4aa727a97717ad539bddb727a6739bdeb70fa5539fdcb38fdea9cfe6d39fdb39cfe15386b18372ee3643a3be2e31ff3e9c52fff7439f8ba1d7121d86e9c76219b0b557329ff34d1dd372e0efb8fce060000";}
-//system_time_message with packet_id=1
-static char* __get_test_system_time_message()	{ return "030100011f8b08089717185c000353797374656d54696d6500358dcb0a82401440f77ec570f77a0b89227c10151428056350cb61bc3e601cc3b966fe7d6eda1e38e744e9b733e243836b7b1bc33a588120abfbb2b5750c2357fe0ed2c48be4ec98baa2ed482c82753134ccef3de2344d8162a7837ea8f199675237d4298787421e433c916997f88cf2258b6b7ec6658020f4380c64f9c1fa56558e3886700b62649df55a993ff3efc5e602a27492158fcbb252c61160e2fd003518c11fb6000000"; }
+
+void build_SLT_BROADCAST_SVC_SIGNALING_table(lls_table_t *lls_table, xml_node_t *xml_node);
 
 
 

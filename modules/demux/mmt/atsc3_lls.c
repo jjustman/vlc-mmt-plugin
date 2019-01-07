@@ -28,7 +28,8 @@ static lls_table_t* __lls_create_base_table_raw(uint8_t* lls, int size) {
 		temp_gzip_payload[i-4] = lls[i];
 	}
 	base_table->raw_xml.xml_payload_compressed = temp_gzip_payload;
-	base_table->raw_xml.xml_payload_compressed_size = remaining_payload_size -4;
+	base_table->raw_xml.xml_payload_compressed_size = remaining_payload_size - 4;
+
 
 	//printf("first 4 hex: 0x%x 0x%x 0x%x 0x%x", temp_gzip_payload[0], temp_gzip_payload[1], temp_gzip_payload[2], temp_gzip_payload[3]);
 
@@ -46,7 +47,7 @@ static lls_table_t* __lls_create_base_table_raw(uint8_t* lls, int size) {
 #define GZIP_CHUNK_INPUT_READ_SIZE 1024
 #define GZIP_CHUNK_OUTPUT_BUFFER_SIZE 1024*8
 
-static int __unzip_gzip_payload(uint8_t *input_payload, uint input_payload_size, uint8_t **decompressed_payload) {
+int __unzip_gzip_payload(uint8_t *input_payload, uint input_payload_size, uint8_t **decompressed_payload) {
 
 	if(input_payload_size > GZIP_CHUNK_INPUT_SIZE_MAX) return -1;
 
@@ -57,7 +58,6 @@ static int __unzip_gzip_payload(uint8_t *input_payload, uint input_payload_size,
     int ret;
     unsigned have;
     z_stream strm;
-
 
     uint8_t *decompressed;
 
@@ -145,14 +145,143 @@ lls_table_t* lls_create_xml_table( uint8_t* lls_packet, int size) {
 	return NULL;
 }
 
-/***
- * decompressed l
- */
+lls_table_t* lls_create_table( uint8_t* lls_packet, int size) {
+
+	lls_table_t* lls_table = lls_create_xml_table(lls_packet, size);
+	if(!lls_table) {
+		println("%d:atsc3_lls.c:lls_create_table - error creating instance of LLS table and subclass",__LINE__);
+		return NULL;
+	}
+	//process XML payload
+
+	xml_node_t* xml_root = parse_xml_payload(lls_table->raw_xml.xml_payload, lls_table->raw_xml.xml_payload_size);
+
+	//get our first tag name and delegate to parser methods
+
+	printf("%d:lls_create_table: calling process_xml_payload with xml children count: %d\n", __LINE__, xml_node_children(xml_root));
+
+	int res = process_xml_payload(lls_table, xml_root);
+
+	if(!res)
+		return lls_table;
+	else
+		return NULL;
+}
+
+xml_node_t* parse_xml_payload(uint8_t *xml, int xml_size) {
+	xml_document_t* document = xml_parse_document(xml, xml_size);
+	if (!document) {
+		error("Could not parse document\n");
+		return NULL;
+	}
+
+	xml_node_t* root = xml_document_root(document);
+	xml_string_t* root_node_name = xml_node_name(root); //root
+
+	//chomp past root xml document declaration
+	if(xml_string_equals_ignore_case(root_node_name, "?xml")) {
+		root = xml_node_child(root, 0);
+		root_node_name = xml_node_name(root); //root
+		dump_xml_string(root_node_name);
+	}
+
+	printf("%d:atsc3_lls.c:parse_xml_payload, returning first node:", __LINE__);
+	dump_xml_string(root_node_name);
+	printf("\n");
+
+	return root;
+}
+
+#define LLS_TABLE_NAME_SLT "SLT"
+int process_xml_payload(lls_table_t* lls_table, xml_node_t* xml_root) {
+
+	xml_string_t* root_node_name = xml_node_name(xml_root); //root
+
+	char* node_name = xml_string_clone(root_node_name);
+	printf("%d:process_xml_payload - node ptr: %p, name is: %s, size: %d\n", __LINE__, root_node_name, node_name);
+
+	int ret = -1;
+	if(lls_table->lls_table_id == SLT) {
+
+		//build SLT table
+		ret = build_SLT_table(lls_table, xml_root);
+
+	} else {
+		error("unknown LLS table type: %s", xml_string_clone(root_node_name));
+	}
+
+	return ret;
+}
 
 
+#define LLS_SLT_SIMULCAST_TSID 				"SimulcastTSID"
+#define LLS_SLT_SVC_CAPABILITIES			"SvcCapabilities"
+#define LLS_SLT_BROADCAST_SVC_SIGNALING 	"BroadcastSvcSignaling"
+#define LLS_SLT_SVC_INET_URL				"SvcInetUrl"
+#define LLS_SLT_OTHER_BSID					"OtherBsid"
+
+int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
+
+	/** bsid **/
+
+	xml_string_t* root_node_name = xml_node_name(xml_root); //root
+	dump_xml_string(root_node_name);
+
+	uint8_t* slt_attributes = xml_attributes_clone(root_node_name);
+
+	printf("%d:build_SLT_table, attributes are: %s\n", __LINE__, slt_attributes);
+
+	int svc_size = xml_node_children(xml_root);
+
+	//build our service rows
+	for(int i=0; i < svc_size; i++) {
+		xml_node_t* service_row_node = xml_node_child(xml_root, i);
+		xml_string_t* service_row_node_xml_string = xml_node_name(service_row_node);
+
+		int svc_child_size = xml_node_children(service_row_node);
+
+		dump_xml_string(service_row_node_xml_string);
+
+		for(int j=0; j < svc_child_size; j++) {
+
+			xml_node_t* service_child_row_node = xml_node_child(service_row_node, j);
+			xml_string_t* service_child_row_node_xml_string = xml_node_name(service_child_row_node);
+
+			dump_xml_string(service_child_row_node_xml_string);
+
+			if(xml_string_equals_ignore_case(service_child_row_node_xml_string, LLS_SLT_SIMULCAST_TSID)) {
+				error("%d:build_SLT_table - not supported: ", __LINE__);
+				error(LLS_SLT_SIMULCAST_TSID)
+			} else if(xml_string_equals_ignore_case(service_child_row_node_xml_string, LLS_SLT_SVC_CAPABILITIES)) {
+				error("%d:build_SLT_table - not supported: ", __LINE__);
+				error(LLS_SLT_SVC_CAPABILITIES)
+			} else if(xml_string_equals_ignore_case(service_child_row_node_xml_string,  LLS_SLT_BROADCAST_SVC_SIGNALING)) {
+				build_SLT_BROADCAST_SVC_SIGNALING_table(lls_table, service_row_node);
+
+			} else if(xml_string_equals_ignore_case(service_child_row_node_xml_string, LLS_SLT_SVC_INET_URL)) {
+				error("%d:build_SLT_table - not supported: ", __LINE__);
+				error(LLS_SLT_SVC_INET_URL)
+			} else if(xml_string_equals_ignore_case(service_child_row_node_xml_string, LLS_SLT_OTHER_BSID)) {
+				error("%d:build_SLT_table - not supported: ", __LINE__);
+				error(LLS_SLT_OTHER_BSID)
+			} else {
+				error("%d:build_SLT_table - unknown type: %s", __LINE__, xml_string_clone(service_child_row_node_xml_string));
+			}
+		}
+	}
+	return 0;
+}
+
+void build_SLT_BROADCAST_SVC_SIGNALING_table(lls_table_t *lls_table, xml_node_t *service_row_node) {
+	xml_string_t* service_row_node_xml_string = xml_node_name(service_row_node);
+	uint8_t *svc_attributes = xml_attributes_clone(service_row_node_xml_string);
+
+	printf("%d:build_SLT_BROADCAST_SVC_SIGNALING_table - attributes are: %s", __LINE__, svc_attributes);
+
+}
 
 
-void lls_dump_base_table(lls_table_t *base_table) {
+void lls_dump_instance_table(lls_table_t *base_table) {
 	println("base table:");
 	println("-----------");
 	println("lls_table_id				: %d	(0x%x)", base_table->lls_table_id, base_table->lls_table_id);
@@ -166,85 +295,6 @@ void lls_dump_base_table(lls_table_t *base_table) {
 }
 
 
-
-#define __UNIT_TEST 1
-#ifdef __UNIT_TEST
-
-int test_lls_create_xml_table(char* base64_payload);
-
-int main() {
-
-	test_lls_create_xml_table(__get_test_slt());
-
-	return 0;
-}
-
-
-
-
-void __create_binary_payload(char *test_payload_base64, uint8_t **binary_payload, int * binary_payload_size) {
-	int test_payload_base64_length = strlen(test_payload_base64);
-	int test_payload_binary_size = test_payload_base64_length/2;
-
-	uint8_t *test_payload_binary = calloc(test_payload_binary_size, sizeof(uint8_t));
-
-	for (size_t count = 0; count < test_payload_binary_size; count++) {
-	        sscanf(test_payload_base64, "%2hhx", &test_payload_binary[count]);
-	        test_payload_base64 += 2;
-	}
-
-	*binary_payload = test_payload_binary;
-	*binary_payload_size = test_payload_binary_size;
-}
-
-
-int test_lls_create_xml_table(char* base64_payload) {
-
-	uint8_t *binary_payload;
-	int binary_payload_size;
-
-	__create_binary_payload(base64_payload, &binary_payload, &binary_payload_size);
-
-	lls_table_t *lls_table = lls_create_xml_table(binary_payload, binary_payload_size);
-
-	lls_dump_base_table(lls_table);
-
-	return 0;
-}
-
-int test_lls_components() {
-
-	char* test_payload_base64;
-
-	test_payload_base64 = __get_test_slt();
-	int test_payload_base64_length = strlen(test_payload_base64);
-	int test_payload_binary_size = test_payload_base64_length/2;
-
-	uint8_t *test_payload_binary = calloc(test_payload_binary_size, sizeof(uint8_t));
-
-	for (size_t count = 0; count < test_payload_binary_size; count++) {
-	        sscanf(test_payload_base64, "%2hhx", &test_payload_binary[count]);
-	        test_payload_base64 += 2;
-	}
-
-	lls_table_t *parsed_table = lls_create_xml_table(test_payload_binary, test_payload_binary_size);
-	lls_dump_base_table(parsed_table);
-
-	uint8_t *decompressed_payload;
-	int ret = __unzip_gzip_payload(parsed_table->raw_xml.xml_payload, parsed_table->raw_xml.xml_payload_size, &decompressed_payload);
-	//both char and %s with '\0' should be the same
-	//printf("gzip ret is: %d\n", ret);
-	for(int i=0; i < ret; i++) {
-		printf("%c", decompressed_payload[i]);
-	}
-
-	printf("%s", decompressed_payload);
-
-	return 0;
-}
-
-
-#endif
 
 
 /** from vlc udp access module **/

@@ -53,36 +53,36 @@ void test_parse_xml(uint8_t *xml) {
 	if (!document) {
 			printf("Could not parse document\n");
 			exit(EXIT_FAILURE);
+	}
+	struct xml_node* root = xml_document_root(document);
+	printf("-----%d:xml_easy_child\n", __LINE__);
+
+	struct xml_node *node = xml_node_child(root, 0); //"SLT");
+	printf("SLT node: %p", node);
+
+
+
+	struct xml_string* node_name = xml_node_name(node);
+	dump_xml_string(node_name);
+
+	printf("children: %d", xml_node_children(node));
+
+	int child_size = xml_node_children(node);
+	for(int i=0; i < child_size; i++) {
+		struct xml_node* svc_row = xml_node_child(node, i);
+		struct xml_string* svc_row_name = xml_node_name(svc_row);
+		dump_xml_string(svc_row_name);
+
+		if(xml_node_children(svc_row)) {
+			struct xml_node* bss = xml_node_child(svc_row, 0);
+			struct xml_string* bss_row_name = xml_node_name(bss);
+
+			dump_xml_string(bss_row_name);
+
+
+
 		}
-		struct xml_node* root = xml_document_root(document);
-		printf("-----%d:xml_easy_child\n", __LINE__);
-
-		struct xml_node *node = xml_node_child(root, 0); //"SLT");
-		printf("SLT node: %p", node);
-
-
-
-		struct xml_string* node_name = xml_node_name(node);
-		dump_xml_string(node_name);
-
-		printf("children: %d", xml_node_children(node));
-
-		int child_size = xml_node_children(node);
-		for(int i=0; i < child_size; i++) {
-			struct xml_node* svc_row = xml_node_child(node, i);
-			struct xml_string* svc_row_name = xml_node_name(svc_row);
-			dump_xml_string(svc_row_name);
-
-			if(xml_node_children(svc_row)) {
-				struct xml_node* bss = xml_node_child(svc_row, 0);
-				struct xml_string* bss_row_name = xml_node_name(bss);
-
-				dump_xml_string(bss_row_name);
-
-
-
-			}
-		}
+	}
 
 
 
