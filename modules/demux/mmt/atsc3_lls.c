@@ -5,6 +5,7 @@
  */
 
 #include "atsc3_lls.h"
+#include "mmtp_utils.h"
 #include "xml.h"
 
 static lls_table_t* __lls_create_base_table_raw(uint8_t* lls, int size) {
@@ -228,6 +229,18 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 	dump_xml_string(root_node_name);
 
 	uint8_t* slt_attributes = xml_attributes_clone(root_node_name);
+	kvp_collection_t* slt_attributes_collecton = kvp_parse_string(slt_attributes);
+	char* bsid_char = kvp_find_key(slt_attributes_collecton, "bsid");
+	//if there is a space, split and callocif(strnstr(bsid, "", ))
+
+	if(bsid_char) {
+		int bsid_i;
+		itoa(bsid_i, bsid_char, 10);
+
+		lls_table->slt_table.bsid_n = 1;
+		lls_table->slt_table.bsid =  (int**)calloc(lls_table->slt_table.bsid_n , sizeof(int));
+		lls_table->slt_table.bsid[0] = bsid_i;
+	}
 
 	printf("%d:build_SLT_table, attributes are: %s\n", __LINE__, slt_attributes);
 
@@ -238,48 +251,76 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 		xml_node_t* service_row_node = xml_node_child(xml_root, i);
 		xml_string_t* service_row_node_xml_string = xml_node_name(service_row_node);
 
+		/** push service row **/
+		lls_table->slt_table.service_entry_n++;
+		if(!lls_table->slt_table.service_entry) {
+			lls_table->slt_table.service_entry = (service_t**)calloc(32, sizeof(service_t));
+		}
+		//todo - fix this for proper slab alloc
+
+//		else if(){
+//			realloc(lls_table->slt_table.service_entry, lls_table->slt_table.service_entry_n * sizeof(service_t*));
+//		}
+
+		//service_row_node_xml_string
+		uint8_t* child_row_node_attributes_s = xml_attributes_clone(service_row_node_xml_string);
+		kvp_collection_t* service_attributes_collecton = kvp_parse_string(child_row_node_attributes_s);
+
+		lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1] = calloc(1, sizeof(service_t));
+		service_t* service_entry = lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1];
+		service_entry->short_service_name = kvp_find_key(service_attributes_collecton, "shortServiceName");
+
 		int svc_child_size = xml_node_children(service_row_node);
 
 		dump_xml_string(service_row_node_xml_string);
 
 		for(int j=0; j < svc_child_size; j++) {
 
-			xml_node_t* service_child_row_node = xml_node_child(service_row_node, j);
-			xml_string_t* service_child_row_node_xml_string = xml_node_name(service_child_row_node);
+			xml_node_t* child_row_node = xml_node_child(service_row_node, j);
+			xml_string_t* child_row_node_xml_string = xml_node_name(child_row_node);
 
-			dump_xml_string(service_child_row_node_xml_string);
+			uint8_t* child_row_node_attributes_s = xml_attributes_clone(child_row_node_xml_string);
+			kvp_collection_t* child_attributes_kvp = kvp_parse_string(child_row_node_attributes_s);
 
-			if(xml_string_equals_ignore_case(service_child_row_node_xml_string, LLS_SLT_SIMULCAST_TSID)) {
-				error("%d:build_SLT_table - not supported: ", __LINE__);
+			dump_xml_string(child_row_node_xml_string);
+
+			if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_SIMULCAST_TSID)) {
+				error("%d:build_SLT_table - not supported:\n", __LINE__);
 				error(LLS_SLT_SIMULCAST_TSID)
-			} else if(xml_string_equals_ignore_case(service_child_row_node_xml_string, LLS_SLT_SVC_CAPABILITIES)) {
-				error("%d:build_SLT_table - not supported: ", __LINE__);
+			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_SVC_CAPABILITIES)) {
+				error("%d:build_SLT_table - not supported:\n", __LINE__);
 				error(LLS_SLT_SVC_CAPABILITIES)
-			} else if(xml_string_equals_ignore_case(service_child_row_node_xml_string,  LLS_SLT_BROADCAST_SVC_SIGNALING)) {
-				build_SLT_BROADCAST_SVC_SIGNALING_table(lls_table, service_row_node);
+			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_BROADCAST_SVC_SIGNALING)) {
+				build_SLT_BROADCAST_SVC_SIGNALING_table(service_entry, service_row_node, child_attributes_kvp);
 
-			} else if(xml_string_equals_ignore_case(service_child_row_node_xml_string, LLS_SLT_SVC_INET_URL)) {
-				error("%d:build_SLT_table - not supported: ", __LINE__);
+			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_SVC_INET_URL)) {
+				error("%d:build_SLT_table - not supported:\n", __LINE__);
 				error(LLS_SLT_SVC_INET_URL)
-			} else if(xml_string_equals_ignore_case(service_child_row_node_xml_string, LLS_SLT_OTHER_BSID)) {
-				error("%d:build_SLT_table - not supported: ", __LINE__);
+			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_OTHER_BSID)) {
+				error("%d:build_SLT_table - not supported:\n", __LINE__);
 				error(LLS_SLT_OTHER_BSID)
 			} else {
-				error("%d:build_SLT_table - unknown type: %s", __LINE__, xml_string_clone(service_child_row_node_xml_string));
+				error("%d:build_SLT_table - unknown type: %s\n", __LINE__, xml_string_clone(child_row_node_xml_string));
 			}
 		}
 	}
 	return 0;
 }
 
-void build_SLT_BROADCAST_SVC_SIGNALING_table(lls_table_t *lls_table, xml_node_t *service_row_node) {
+void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_t *service_row_node, kvp_collection_t* kvp_collection) {
 	xml_string_t* service_row_node_xml_string = xml_node_name(service_row_node);
 	uint8_t *svc_attributes = xml_attributes_clone(service_row_node_xml_string);
 
 	printf("%d:build_SLT_BROADCAST_SVC_SIGNALING_table - attributes are: %s", __LINE__, svc_attributes);
 
-}
+	service_table->broadcast_svc_signaling.sls_destination_ip_address = kvp_find_key(kvp_collection, "slsDestinationIpAddress");
+	service_table->broadcast_svc_signaling.sls_destination_udp_port = kvp_find_key(kvp_collection, "slsDestinationUdpPort");
+	service_table->broadcast_svc_signaling.sls_source_ip_address = kvp_find_key(kvp_collection, "slsSourceIpAddress");
+	service_table->broadcast_svc_signaling.sls_protocol = -1;
+	//kvp_find_key(kvp_collection, "slsProtocol";
 
+}
+	//process interior attributes, e.g.
 
 void lls_dump_instance_table(lls_table_t *base_table) {
 	println("base table:");
@@ -389,7 +430,7 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 
 
 
-kvp_t* kvp_find_key(kvp_collection_t *collection, char* key) {
+char* kvp_find_key(kvp_collection_t *collection, char* key) {
 	for(int i=0; i < collection->size_n; i++) {
 		kvp_t *check = &collection->kvp_collection[i];
 		printf("%d:kvp_find_key: checking: %s against %s, resolved val is: %s\n",__LINE__, check->key, key, check->val);

@@ -114,7 +114,7 @@ typedef struct kvp_collection {
 } kvp_collection_t;
 
 kvp_collection_t* kvp_parse_string(uint8_t *input_string);
-kvp_t* kvp_find_key(kvp_collection_t *collection, char* key);
+char* kvp_find_key(kvp_collection_t *collection, char* key);
 
 
 
@@ -145,6 +145,7 @@ typedef struct service {
 	uint	service_category;
 	char*	short_service_name;
 	uint8_t slt_svc_seq_num;  //Version of SLT service info for this service.
+	broadcast_svc_signaling_t broadcast_svc_signaling;
 } service_t;
 
 
@@ -258,7 +259,7 @@ int process_xml_payload(lls_table_t* lls_table, xml_node_t* xml_node);
 //etst methods
 
 
-void build_SLT_BROADCAST_SVC_SIGNALING_table(lls_table_t *lls_table, xml_node_t *xml_node);
+void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_t *xml_node, kvp_collection_t* kvp_collection);
 
 
 

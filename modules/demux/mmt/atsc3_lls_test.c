@@ -23,8 +23,8 @@ void test_kvp_extraction();
 int main() {
 
 	//test_lls_create_xml_table(__get_test_slt());
-	//test_lls_create_slt_table(__get_test_slt());
-	test_kvp_extraction();
+	test_lls_create_slt_table(__get_test_slt());
+	//test_kvp_extraction();
 	return 0;
 }
 
