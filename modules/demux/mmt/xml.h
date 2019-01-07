@@ -38,13 +38,13 @@ extern "C" {
 /**
  * Opaque structure holding the parsed xml document
  */
-struct xml_document;
-struct xml_node;
+typedef struct xml_document xml_document_t;
+typedef struct xml_node xml_node_t;
 
 /**
  * Internal character sequence representation
  */
-struct xml_string;
+typedef struct xml_string xml_string_t;
 
 
 
@@ -164,6 +164,10 @@ size_t xml_string_length(struct xml_string* string);
  * @warning Will write at most length bytes, even if the string is longer
  */
 void xml_string_copy(struct xml_string* string, uint8_t* buffer, size_t length);
+
+uint8_t* xml_string_clone(xml_string_t* s);
+uint8_t* xml_attributes_clone(xml_string_t* s);
+
 
 #ifdef __cplusplus
 }

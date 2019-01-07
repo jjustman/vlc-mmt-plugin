@@ -58,7 +58,7 @@ lls_group_id				: 1	(0x1)
 void test_kvp_extraction() {
 	char* kvp_test_string_1 = "xmlns=\"tag:atsc.org,2016:XMLSchemas/ATSC3/Delivery/SLT/1.0/\" bsid=\"50\"";
 	kvp_collection_t *collection_1 = kvp_parse_string(kvp_test_string_1);
-	printf("sizeof kvp collection: %d, bsid value is: %s", collection_1->size_n, kvp_find_key(collection, "bsid"));
+	printf("%d:test_kvp_extraction - sizeof kvp collection: %d, bsid value is: %s", __LINE__, collection_1->size_n, kvp_find_key(collection_1, "bsid"));
 
 }
 

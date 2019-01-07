@@ -113,88 +113,8 @@ typedef struct kvp_collection {
 	int 	size_n;
 } kvp_collection_t;
 
-kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
-	int input_len = strlen(input_string);
-	kvp_collection_t *collection = calloc(1, sizeof(kvp_collection_t));
-
-	//a= is not valid, must be at least 3 chars
-	//return an empty collection
-	if(input_len < 3)
-			return collection;
-
-	//find out how many ='s we have, as that will tell us how many kvp_t entries to create
-	//first position can never be =
-	int quote_depth = 0;
-	int equals_count = 0;
-	for(int i=1; i < input_len; i++) {
-		if(input_string[i] == '"') {
-			if(quote_depth)
-				quote_depth--;
-			else
-				quote_depth++;
-		} else if(input_string[i] == '=') {
-			if(!quote_depth)
-				equals_count++;
-		}
-	}
-
-	printf("%d:parse_kvp_string: creating %d entries", __LINE__, equals_count);
-	equals_count = equals_count < 0 ? 0 : equals_count;
-
-	//if we couldn't parse this, just return the empty (0'd collection)
-	if(!equals_count) return collection;
-
-	collection->kvp_collection = calloc(equals_count, sizeof(kvp_t));
-	quote_depth = 0;
-	int kvp_position = 0;
-	int token_key_start = 0;
-	int token_val_start = 0;
-
-	kvp_t* current_kvp = collection->kvp_collection[kvp_position++];
-	collection->size_n = equals_count;
-
-	for(int i=1; i < input_len && kvp_position <= equals_count; i++) {
-		if(isspace(input_string[i]) && !quote_depth) {
-
-			token_key_start = i + 1; //walk forward
-		} else {
-			if(input_string[i] == '"' && input_string[i-1] != '\\') {
-				if(quote_depth) {
-					quote_depth--;
-
-					//extract value here
-					kvp_position++;
-					int len = i - 1 - token_val_start;
-					current_kvp->val = calloc(len + 1, sizeof(char));
-					current_kvp->val = strncpy(&current_kvp->val, &input_string[token_val_start], len);
-
-					current_kvp = collection->kvp_collection[kvp_position];
-				} else {
-					quote_depth++;
-					token_val_start = i + 1;
-				}
-			} else if(input_string[i] == '=') {
-				if(!quote_depth) {
-					//extract key here
-					int len = i - 1 - token_key_start;
-					current_kvp->key = calloc(len + 1, sizeof(char));
-					current_kvp->key = strncpy(&current_kvp->key, &input_string[token_key_start], len);
-
-				} else {
-					//ignore it if we are in a quote value
-				}
-			}
-		}
-	}
-
-}
-
-kvp_t* kvp_find_key(kvp_collection_t *collection, char* key)) {
-	for(int i=0; i < collection->size_n; i++) {
-		kvp_t check = collection->kvp_collection[i];
-		if(strncmp(check->key, ))
-	}
-}
+kvp_collection_t* kvp_parse_string(uint8_t *input_string);
+kvp_t* kvp_find_key(kvp_collection_t *collection, char* key);
 
 
 
@@ -249,7 +169,7 @@ typedef enum {
 	AEAT,
 	OnscreenMessageNotification,
 	RESERVED
-};
+} lls_table_type_t;
 
 typedef struct lls_table {
 	uint8_t								lls_table_id; //map via lls_table_id_type;

@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <strings.h>
 
 #include "xml.h"
 
@@ -47,13 +48,13 @@
  *
  * UTF-8 text
  */
-struct xml_string {
+typedef struct xml_string {
 	uint8_t const* buffer;
 	size_t length;
 	struct xml_string *attributes;
 	bool is_self_closing_tag;
 
-};
+} xml_string_t;
 
 
 void print_substring(const uint8_t *str, int skip, int tail)
@@ -85,26 +86,26 @@ void dump_xml_string(struct xml_string *node) {
  * An xml_node will always contain a tag name and a 0-terminated list of
  * children. Moreover it may contain text content.
  */
-struct xml_node {
+typedef struct xml_node {
 	struct xml_string* name;
 	struct xml_string* content;
 	struct xml_string* attributes;
 	struct xml_node** children;
-};
+} xml_node_t;
 
 /**
  * [OPAQUE API]
  *
  * An xml_document simply contains the root node and the underlying buffer
  */
-struct xml_document {
+typedef struct xml_document {
 	struct {
 		uint8_t* buffer;
 		size_t length;
 	} buffer;
 
 	struct xml_node* root;
-};
+} xml_document_t;
 
 
 
@@ -185,12 +186,25 @@ static _Bool xml_string_equals(struct xml_string* a, struct xml_string* b) {
 	return true;
 }
 
+bool xml_string_equals_ignore_case(xml_string_t *a, char* b) {
+
+	//strncasecmp
+	int b_strlen = strlen(b);
+
+	if(a->length != b_strlen)
+		return false;
+
+ 	uint8_t* a_str = calloc(xml_string_length(a) + 1, sizeof(uint8_t));
+	xml_string_copy(a, a_str, xml_string_length(a));
+
+	return strncasecmp(a_str, b, b_strlen) == 0;
+}
 
 
 /**
- * [PRIVATE]
+ * moving to public
  */
-static uint8_t* xml_string_clone(struct xml_string* s) {
+uint8_t* xml_string_clone(xml_string_t* s) {
 	if (!s) {
 		return 0;
 	}
@@ -199,6 +213,21 @@ static uint8_t* xml_string_clone(struct xml_string* s) {
 
 	xml_string_copy(s, clone, s->length);
 	clone[s->length] = 0;
+
+	return clone;
+}
+
+
+
+uint8_t* xml_attributes_clone(xml_string_t* s) {
+	if (!s) {
+		return 0;
+	}
+
+	uint8_t* clone = calloc(s->attributes->length + 1, sizeof(uint8_t));
+
+	xml_string_copy(s->attributes, clone, s->attributes->length);
+	clone[s->attributes->length] = 0;
 
 	return clone;
 }

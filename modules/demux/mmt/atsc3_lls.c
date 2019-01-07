@@ -296,6 +296,114 @@ void lls_dump_instance_table(lls_table_t *base_table) {
 
 
 
+kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
+	int input_len = strlen(input_string);
+	printf("%d:kvp_parse_string: input string len: %d, input string:\n\n%s\n\n", __LINE__, input_len, input_string);
+	kvp_collection_t *collection = calloc(1, sizeof(kvp_collection_t));
+
+	//a= is not valid, must be at least 3 chars
+	//return an empty collection
+	if(input_len < 3)
+			return collection;
+
+	//find out how many ='s we have, as that will tell us how many kvp_t entries to create
+	//first position can never be =
+	int quote_depth = 0;
+	int equals_count = 0;
+	for(int i=1; i < input_len; i++) {
+		if(input_string[i] == '"') {
+			if(quote_depth)
+				quote_depth--;
+			else
+				quote_depth++;
+		} else if(input_string[i] == '=') {
+			if(!quote_depth)
+				equals_count++;
+		}
+	}
+
+	printf("%d:parse_kvp_string: creating %d entries\n", __LINE__, equals_count);
+	equals_count = equals_count < 0 ? 0 : equals_count;
+
+	//if we couldn't parse this, just return the empty (0'd collection)
+	if(!equals_count) return collection;
+
+	collection->kvp_collection = (kvp_t**)calloc(equals_count, sizeof(kvp_t*));
+	collection->size_n = equals_count;
+
+	quote_depth = 0;
+	int kvp_position = 0;
+	int token_key_start = 0;
+	int token_val_start = 0;
+
+	collection->kvp_collection[kvp_position] = (kvp_t*)calloc(1, sizeof(kvp_t));
+	kvp_t* current_kvp = collection->kvp_collection[kvp_position];
+
+
+	for(int i=1; i < input_len && kvp_position <= equals_count; i++) {
+
+
+		if(isspace(input_string[i]) && !quote_depth) {
+
+			token_key_start = i + 1; //walk forward
+		} else {
+			if(input_string[i] == '"' && input_string[i-1] != '\\') {
+				if(quote_depth) {
+					quote_depth--;
+
+					//extract value here
+					kvp_position++;
+					int len = i - token_val_start;
+					current_kvp->val = calloc(len + 1, sizeof(char));
+					strncpy(current_kvp->val, &input_string[token_val_start], len);
+					current_kvp->val[len] = '\0';
+
+					printf("%d:parse_kvp_string: marking token_val_start: %d, len: %d\n", __LINE__, token_val_start, len);
+					collection->kvp_collection[kvp_position] = (kvp_t*)calloc(1, sizeof(kvp_t));
+					current_kvp = collection->kvp_collection[kvp_position];
+
+
+				} else {
+					quote_depth++;
+					token_val_start = i + 1;
+				}
+			} else if(input_string[i] == '=') {
+				if(!quote_depth) {
+					//extract key here
+					int len = i - token_key_start;
+					current_kvp->key = calloc(len + 1, sizeof(char));
+					current_kvp->key = strncpy(current_kvp->key, &input_string[token_key_start], len);
+					current_kvp->key[len] = '\0';
+
+				} else {
+					//ignore it if we are in a quote value
+				}
+			}
+		}
+	}
+
+	printf("%d:kvp_parse_string - size is: %d\n", collection->size_n);
+	return collection;
+
+}
+
+
+
+kvp_t* kvp_find_key(kvp_collection_t *collection, char* key) {
+	for(int i=0; i < collection->size_n; i++) {
+		kvp_t *check = collection->kvp_collection[i];
+		printf("%d:kvp_find_key: checking: %s against %s\n",__LINE__, check->key, key);
+		if(strcasecmp(check->key, key)==0) {
+			return check->val;
+		}
+	}
+	return NULL;
+
+}
+
+
+
+
 
 /** from vlc udp access module **/
 
