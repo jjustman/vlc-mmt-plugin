@@ -15,8 +15,8 @@
  * 		- add in base signaling implementation for PA table processing,
  * 			- support packet_id selection via consuming MPT table messages rather than building es streams for all packet_id
  *		- reduce "observed" jitter by using timestamp (short-format NTP) of packet payload for es block PTS + jitter buffer time
- *		- NRT asset support to object on disk
- *		- GFD support to object on disk
+ *		- (excluded from atsc 3.0 a/331 spec) NRT asset support to object on disk
+ *		- (excluded from atsc 3.0 a/331 spec) GFD support to object on disk
  *		- overlay text support for diagnostics:
  *			- mmt packet_id v/a identification
  *			- mmt packet loss, e.g. via packet_counter gaps

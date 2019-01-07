@@ -1,7 +1,9 @@
-all: atsc3_lls.o atsc3_lls_slt_parser_test atsc3_lls_test
+all: atsc3_lmt_test atsc3_lls.o atsc3_lls_slt_parser_test atsc3_lls_test
 
 #-o atsc3_lls.o -lz xml.o
 
+atsc3_lmt_test: atsc3_lmt_test.c
+	cc -g atsc3_lmt_test.c -o atsc3_lmt_test
 
 #atsc3_lls.o: atsc3_lls.h atsc3_lls.c
 #	cc -g -c atsc3_lls.c 

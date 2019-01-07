@@ -16,6 +16,8 @@ static char* __get_test_slt()					{ return "010100021f8b08089217185c0003534c5400
 //system_time_message with packet_id=1
 static char* __get_test_system_time_message()	{ return "030100011f8b08089717185c000353797374656d54696d6500358dcb0a82401440f77ec570f77a0b89227c10151428056350cb61bc3e601cc3b966fe7d6eda1e38e744e9b733e243836b7b1bc33a588120abfbb2b5750c2357fe0ed2c48be4ec98baa2ed482c82753134ccef3de2344d8162a7837ea8f199675237d4298787421e433c916997f88cf2258b6b7ec6658020f4380c64f9c1fa56558e3886700b62649df55a993ff3efc5e602a27492158fcbb252c61160e2fd003518c11fb6000000"; }
 
+static char* _get_2019_01_07_slt_route_dash()	{ return "010100151f8b08080000000000ff534c5400cd92514bc3301485df05ff43c8b3a64d66c73a5ac7dc10065b19b4135f631bba489acc241beedf7bb756870a437df2e9c239f7de9cfb9164f4da28b413d649a3534c498891d0a5a9a4ae53bc2aeeaf071839cf75c595d122c57be1f0e8f6f222c9e7058259ed52ec793de4de95c4d8fa8a85b43f7c5cccf3722d1aee8271914f7ac1542809afec03180be09500a32727ab148718962184925cd89d2c05726d9d814729460d7f3676b2e65a0b959914df44a049fd4983b66e6ac2bda88dddb7dada58dfadcd7803e1b37191cdc1503edf95b978c9b6cd29c121c49d35bc2ab93bfab2d65c0107e8774b6bbc298d6a172bb738c47a171f3ef0b5de21de372f3c7a53e1bcd4dc8334db8cabca0a0700592f262c8a0825f46bd7aada2ce10c383ca6113bbab9d95a00741aa73123b43f20514cfa0c071dd0a03bfd0c5ff633beec377cd9bfe6cbcef2edfd916f72f8d650df00f37a26b44e030000"; }
+
 
 int test_lls_create_xml_table(char* base64_payload);
 void test_kvp_extraction();
@@ -23,7 +25,8 @@ void test_kvp_extraction();
 int main() {
 
 	//test_lls_create_xml_table(__get_test_slt());
-	test_lls_create_slt_table(__get_test_slt());
+//	test_lls_create_slt_table(__get_test_slt());
+	test_lls_create_slt_route_dash(_get_2019_01_07_slt_route_dash());
 	//test_kvp_extraction();
 	return 0;
 }
@@ -97,6 +100,22 @@ int test_lls_create_xml_table(char* base64_payload) {
 
 
 int test_lls_create_slt_table(char* base64_payload) {
+
+	uint8_t *binary_payload;
+	int binary_payload_size;
+
+	__create_binary_payload(base64_payload, &binary_payload, &binary_payload_size);
+
+	lls_table_t* lls = lls_create_table(binary_payload, binary_payload_size);
+
+	lls_dump_instance_table(lls);
+
+	return 0;
+}
+
+
+
+int test_lls_create_slt_route_dash(char* base64_payload) {
 
 	uint8_t *binary_payload;
 	int binary_payload_size;
