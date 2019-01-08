@@ -8,6 +8,7 @@
 #ifndef MODULES_DEMUX_MMT_MMTP_TYPES_H_
 #define MODULES_DEMUX_MMT_MMTP_TYPES_H_
 
+#include "mmtp_ntp32_to_pts.h"
 #include <vlc_common.h>
 #include <vlc_vector.h>
 
@@ -84,6 +85,8 @@ typedef struct mmtp_sub_flow mmtp_sub_flow_t;
 	uint8_t *mmtp_header_extension_value;	\
 	uint16_t mmtp_packet_id; 				\
 	uint32_t mmtp_timestamp;				\
+	uint16_t mmtp_timestamp_s;				\
+	uint16_t mmtp_timestamp_us;				\
 	uint32_t packet_sequence_number;		\
 	uint32_t packet_counter;				\
 
@@ -120,6 +123,7 @@ typedef struct {
 	uint32_t offset;
 	uint8_t priority;
 	uint8_t dep_counter;
+	uint64_t pts;
 } __mpu_data_unit_payload_fragments_timed_t;
 
 //DO NOT REFERENCE INTEREMDIATE STRUCTS DIRECTLY
@@ -563,6 +567,18 @@ typedef struct
 
     mmtp_sub_flow_vector_t mmtp_sub_flow_vector;
 
+    bool has_set_ntp_to_pts_offset;
+    uint64_t ntp_to_pts_offset_us;
+
+    bool has_set_first_pcr;
+    uint64_t first_pcr;
+
+    bool has_set_first_pts;
+    uint64_t first_pts;
+
+    uint64_t last_pts;
+
+
 } demux_sys_t;
 
 /**
@@ -708,6 +724,8 @@ int mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmt
 
 	mmtp_packet->mmtp_packet_header.mmtp_packet_id			= mmtp_packet_preamble[2]  << 8  | mmtp_packet_preamble[3];
 	mmtp_packet->mmtp_packet_header.mmtp_timestamp 			= mmtp_packet_preamble[4]  << 24 | mmtp_packet_preamble[5]  << 16 | mmtp_packet_preamble[6]   << 8 | mmtp_packet_preamble[7];
+	compute_ntp32_to_seconds_microseconds(mmtp_packet->mmtp_packet_header.mmtp_timestamp, &mmtp_packet->mmtp_packet_header.mmtp_timestamp_s, &mmtp_packet->mmtp_packet_header.mmtp_timestamp_us);
+
 	mmtp_packet->mmtp_packet_header.packet_sequence_number	= mmtp_packet_preamble[8]  << 24 | mmtp_packet_preamble[9]  << 16 | mmtp_packet_preamble[10]  << 8 | mmtp_packet_preamble[11];
 	mmtp_packet->mmtp_packet_header.packet_counter 			= mmtp_packet_preamble[12] << 24 | mmtp_packet_preamble[13] << 16 | mmtp_packet_preamble[14]  << 8 | mmtp_packet_preamble[15];
 

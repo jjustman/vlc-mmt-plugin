@@ -314,7 +314,6 @@ static int  Open( vlc_object_t * );
 static void Close ( vlc_object_t * );
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
-#define uS 1000000ULL
 
 #define DEMUX_INCREMENT VLC_TICK_FROM_MS(250) /* How far the pcr will go, each round */
 #define DEMUX_TRACK_MAX_PRELOAD VLC_TICK_FROM_SEC(15) /* maximum preloading, to deal with interleaving */
@@ -584,7 +583,6 @@ static int Demux( demux_t *p_demux )
 			buf,
 			raw_buf);
 
-
 	mmtp_sub_flow = mmtp_sub_flow_vector_get_or_set_packet_id(mmtp_sub_flow_vector, mmtp_packet_header->mmtp_packet_header.mmtp_packet_id);
 	__LOG_DEBUG( p_demux, "%d:mmtp_demuxer - mmtp_sub_flow is: %p, mmtp_sub_flow->mpu_fragments: %p", __LINE__, mmtp_sub_flow, mmtp_sub_flow->mpu_fragments);
 
@@ -621,7 +619,6 @@ static int Demux( demux_t *p_demux )
 		msg_Warn(p_demux, "%d:mmtp_payload_type: DROPPING payload: 0x2 - signalling message");
 		goto done;
 	}
-
 
 	if(mmtp_packet_header->mmtp_packet_header.mmtp_payload_type == 0x0) {
 		//VECTOR:  TODO - refactor this into helper method
@@ -772,6 +769,15 @@ static int Demux( demux_t *p_demux )
 				uint8_t mmthsample_sequence_number[4];
 
 				if(mmtp_packet_header->mmtp_mpu_type_packet_header.mpu_timed_flag) {
+
+					uint64_t pts = compute_relative_ntp32_pts(p_sys->first_pts, mmtp_packet_header->mpu_data_unit_payload_fragments_timed.mmtp_timestamp_s, mmtp_packet_header->mpu_data_unit_payload_fragments_timed.mmtp_timestamp_us);
+					if(!p_sys->has_set_first_pts) {
+						p_sys->first_pts = pts;
+						p_sys->has_set_first_pts = 1;
+					}
+					//build our PTS
+					mmtp_packet_header->mpu_data_unit_payload_fragments_timed.pts = pts;
+
 					//112 bits in aggregate, 14 bytes
 					uint8_t timed_mfu_block[14];
 					buf = extract(buf, timed_mfu_block, 14);
@@ -1092,18 +1098,36 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 	struct timespec ts;
 	timespec_get(&ts, TIME_UTC);
 
-	//convert to microseconds
 	uint64_t t = ((ts.tv_sec) * uS) + ((ts.tv_nsec) / 1000ULL) ; // convert tv_sec & tv_usec to millisecond
-	es_out_SetPCR( p_obj->out, t + 1 *uS);
+	demux_sys_t *p_sys_priv = p_obj->p_sys;
+	if(!p_sys_priv->has_set_first_pcr) {
+		p_sys_priv->first_pcr = t;
+		p_sys_priv->has_set_first_pcr = 1;
+	}
+	//uint64_t new_pcr = t - p_sys_priv->first_pcr;
+	uint64_t pcr_buf = 250000;
+	uint64_t new_pcr = mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts > pcr_buf ? mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts - pcr_buf : mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts;
 
-	uint64_t manual_pts_calculation = 2 * uS + t;
-	//1 * uS + t + ((1001ULL * uS) / (60000ULL *uS));
+	//convert to microseconds
+//	es_out_SetPCR( p_obj->out, new_pcr);
 
+	msg_Info(p_obj, "%d:es_out_setPcr, compairing from new: %llu, to last: %llu", new_pcr, mpu_type_packet->mpu_data_unit_payload_fragments_timed.last_pt);
+
+
+	if(new_pcr > mpu_type_packet->mpu_data_unit_payload_fragments_timed.last_pts ) {
+		msg_Info(p_obj, "%d:es_out_setPcr - using PTS-buf: %llu", __LINE__, new_pcr);
+		es_out_SetPCR(p_obj->out, new_pcr);
+		mpu_type_packet->mpu_data_unit_payload_fragments_timed.last_pts = new_pcr;
+	}
+
+	//es_out_SetPCR(p_obj->out, mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts);
 
 	if(mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragmentation_indicator == 0x00) {
 		//TODO - use traf/tfdt for actual sample decoding time based upon mvhd.timescale (p_sys->i_timescale)
 		//for now, use the rational 1001 * uS / 60000 * uS ~ 16000us
-		tmp_mpu_fragment->i_pts = manual_pts_calculation;
+		if(mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts)
+			tmp_mpu_fragment->i_pts = mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts;
+
 		if( isobmff_parameters->track[i_track].fmt.i_cat == VIDEO_ES ) {
 			tmp_mpu_fragment->i_length = 16683; //1001 * uS / 60000 * uS;
 
@@ -1240,8 +1264,9 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 			reassembled_mpu_final->i_flags |= BLOCK_FLAG_CORRUPTED;
 		}
 
-
-		reassembled_mpu_final->i_pts = manual_pts_calculation;
+		if(mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts) {
+			reassembled_mpu_final->i_pts = mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts;
+		}
 		reassembled_mpu_final->i_length = 16683; //1001 * uS / 60000 * uS;
 
 		__LOG_MPU_REASSEMBLY(p_obj, "%d:SENDING REASSEMBLED: track: %d, mmtp_packet_id: %u, mpu_sequence_number: %u, size: %d, pts: %llu, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %u, tmp_mpu_fragment: %p",

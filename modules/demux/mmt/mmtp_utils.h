@@ -8,7 +8,9 @@
 #ifndef MODULES_DEMUX_MMT_MMTP_UTILS_H_
 #define MODULES_DEMUX_MMT_MMTP_UTILS_H_
 
+#define uS 1000000ULL
 
+#include <stdlib.h>
 
 /*
  * hack
