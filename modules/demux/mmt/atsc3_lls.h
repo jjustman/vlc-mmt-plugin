@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "atsc3_utils.h"
 #include "zlib.h"
 #include "xml.h"
 
@@ -113,21 +114,6 @@ typedef struct slt_entry {
 	uint bsid; //broadcast stream id
 
 } slt_entry_t;
-
-////todo - refactor out basic NVP/KVP parsing for xml attributes
-typedef struct kvp {
-	char* key;
-	char* val;
-} kvp_t;
-
-typedef struct kvp_collection {
-	kvp_t **kvp_collection;
-	int 	size_n;
-} kvp_collection_t;
-
-kvp_collection_t* kvp_parse_string(uint8_t *input_string);
-char* kvp_find_key(kvp_collection_t *collection, char* key);
-
 
 
 

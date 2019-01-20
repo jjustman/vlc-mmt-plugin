@@ -1,29 +1,38 @@
-all: atsc3_lmt_test atsc3_lls.o atsc3_lls_slt_parser_test atsc3_lls_test atsc3_lls_SystemTime_test
+all: intermediate libatsc3 tests
+clean:
+	rm *.o
+	
+intermediate: xml.o atsc3_utils.o atsc3_lls.o
+libatsc3: libatsc3.o
+tests: atsc3_lmt_test atsc3_lls_slt_parser_test atsc3_lls_test atsc3_lls_SystemTime_test
 
-#-o atsc3_lls.o -lz xml.o
+#intermediate object gen
 
-atsc3_lmt_test: atsc3_lmt_test.c
-	cc -g atsc3_lmt_test.c -o atsc3_lmt_test
-
-#atsc3_lls.o: atsc3_lls.h atsc3_lls.c
-#	cc -g -c atsc3_lls.c 
-	   
 xml.o: xml.c xml.h
 	cc -g -c xml.c 
 	
-#atsc3_lls	   
-
-atsc3_lls.o: atsc3_lls.h atsc3_lls.c
+atsc3_utils.o: atsc3_utils.h atsc3_utils.c
+	cc -g -c atsc3_utils.c
+	
+atsc3_lls.o: atsc3_utils.h atsc3_lls.h atsc3_lls.c
 	cc -g -c atsc3_lls.c
-		  
-			  
-atsc3_lls_test: atsc3_lls_test.c atsc3_lls.o xml.o 
-	cc -g atsc3_lls_test.c atsc3_lls.o xml.o -lz -o atsc3_lls_test
-		   
-		   
-atsc3_lls_slt_parser_test: atsc3_lls_slt_parser_test.c xml.o
-	cc -g atsc3_lls_slt_parser_test.c xml.o -o atsc3_lls_slt_parser_test 
+	
+#core libatsc3 library gen
 
-atsc3_lls_SystemTime_test: atsc3_lls_SystemTime_test.c xml.o atsc3_lls.o
-	cc -g atsc3_lls_SystemTime_test.c atsc3_lls.o xml.o -lz -o atsc3_lls_SystemTime_test 
+libatsc3: xml.o atsc3_utils.o atsc3_lls.o
+	ld -o libatsc3.o -r xml.o atsc3_utils.o atsc3_lls.o 
+
+#unit test generation
+
+atsc3_lmt_test: atsc3_lmt_test.c libatsc3.o
+	cc -g atsc3_lmt_test.c libatsc3.o -lz -o atsc3_lmt_test
+			  
+atsc3_lls_test: atsc3_lls_test.c libatsc3.o
+	cc -g atsc3_lls_test.c libatsc3.o -lz -o atsc3_lls_test
+		   		   
+atsc3_lls_slt_parser_test: atsc3_lls_slt_parser_test.c libatsc3.o
+	cc -g atsc3_lls_slt_parser_test.c libatsc3.o -lz -o atsc3_lls_slt_parser_test 
+
+atsc3_lls_SystemTime_test: atsc3_lls_SystemTime_test.c libatsc3.o
+	cc -g atsc3_lls_SystemTime_test.c libatsc3.o -lz -o atsc3_lls_SystemTime_test 
 
