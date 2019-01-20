@@ -8,9 +8,9 @@
 #ifndef ATSC3_UTILS_H_
 #define ATSC3_UTILS_H_
 
-#define uS 1000000ULL
-
 #include <stdlib.h>
+
+#define uS 1000000ULL
 
 
 #define _ATSC3_UTILS_PRINTLN(...) printf(__VA_ARGS__);printf("\n")

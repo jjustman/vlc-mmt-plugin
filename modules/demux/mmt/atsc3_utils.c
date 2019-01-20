@@ -4,14 +4,15 @@
  *  Created on: Jan 19, 2019
  *      Author: jjustman
  */
+#include <stdlib.h>
 
 #include "atsc3_utils.h"
-
 
 /*
  * Ansi C "itoa" based on Kernighan & Ritchie's "Ansi C"
  * with slight modification to optimize for specific architecture:
  */
+
 
 void strreverse(char* begin, char* end) {
 	char aux;

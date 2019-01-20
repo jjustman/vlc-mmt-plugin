@@ -244,7 +244,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 
 		lls_table->slt_table.bsid_n = 1;
 		lls_table->slt_table.bsid =  (int**)calloc(lls_table->slt_table.bsid_n , sizeof(int));
-		lls_table->slt_table.bsid[0] = bsid_i;
+		lls_table->slt_table.bsid[0] = &bsid_i;
 	}
 
 	_LLS_TRACE("build_SLT_table, attributes are: %s\n", slt_attributes);
@@ -266,7 +266,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 		uint8_t* child_row_node_attributes_s = xml_attributes_clone(service_row_node_xml_string);
 		kvp_collection_t* service_attributes_collecton = kvp_parse_string(child_row_node_attributes_s);
 
-		lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1] = calloc(1, sizeof(service_t*));
+		lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1] = calloc(1, sizeof(service_t));
 		service_t* service_entry = lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1];
 		//map in other attributes, e.g
 
@@ -424,7 +424,7 @@ void lls_dump_instance_table(lls_table_t* base_table) {
 		_LLS_DEBUGN("SLT");
 		_LLS_DEBUGN("--------------------------");
 		for(int i=0; i < base_table->slt_table.bsid_n; i++) {
-			_LLS_DEBUGNT("BSID: %d", base_table->slt_table.bsid[i]);
+			_LLS_DEBUGNT("BSID: %d", *base_table->slt_table.bsid[i]);
 		}
 		_LLS_DEBUGNT("Service contains %d entries:", base_table->slt_table.service_entry_n);
 
@@ -441,10 +441,10 @@ void lls_dump_instance_table(lls_table_t* base_table) {
 			_LLS_DEBUGNT("--------------------------");
 			_LLS_DEBUGNT("broadcast_svc_signaling");
 			_LLS_DEBUGNT("--------------------------");
-			_LLS_DEBUGNT("sls_protocol              : %d", service->broadcast_svc_signaling.sls_protocol );
-			_LLS_DEBUGNT("sls_destination_ip_address: %s", service->broadcast_svc_signaling.sls_destination_ip_address );
-			_LLS_DEBUGNT("sls_destination_udp_port  : %s", service->broadcast_svc_signaling.sls_destination_udp_port );
-			_LLS_DEBUGNT("sls_source_ip_address     : %s", service->broadcast_svc_signaling.sls_source_ip_address );
+			_LLS_DEBUGNT("sls_protocol              : %d", service->broadcast_svc_signaling.sls_protocol);
+			_LLS_DEBUGNT("sls_destination_ip_address: %s", service->broadcast_svc_signaling.sls_destination_ip_address);
+			_LLS_DEBUGNT("sls_destination_udp_port  : %s", service->broadcast_svc_signaling.sls_destination_udp_port);
+			_LLS_DEBUGNT("sls_source_ip_address     : %s", service->broadcast_svc_signaling.sls_source_ip_address);
 			_LLS_DEBUGNT("--------------------------");
 
 		}
