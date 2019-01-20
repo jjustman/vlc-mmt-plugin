@@ -35,6 +35,29 @@
 extern "C" {
 #endif
 
+
+#define _XML_PRINTLN(...) printf(__VA_ARGS__);printf("\n")
+#define _XML_PRINTF(...)  printf(__VA_ARGS__);
+
+#define _XML_ERROR(...)   printf("%s:%d:ERROR:",__FILE__,__LINE__);_XML_PRINTLN(__VA_ARGS__);
+#define _XML_WARN(...)    printf("%s:%d:WARN :",__FILE__,__LINE__);_XML_PRINTLN(__VA_ARGS__);
+#define _XML_INFO(...)    printf("%s:%d:INFO :",__FILE__,__LINE__);_XML_PRINTLN(__VA_ARGS__);
+#define _XML_DEBUG(...)   printf("%s:%d:DEBUG:",__FILE__,__LINE__);_XML_PRINTLN(__VA_ARGS__);
+
+#define _XML_TRACE(...)   printf("%s:%d:TRACE:",__FILE__,__LINE__);_XML_PRINTLN(__VA_ARGS__);
+#define _XML_TRACEF(...)  printf("%s:%d:TRACE:",__FILE__,__LINE__);_XML_PRINTF(__VA_ARGS__);
+#define _XML_TRACEA(...)  _XML_PRINTF(__VA_ARGS__);
+
+#ifdef  __XML_PARSER_FORENSIC__
+#define _XML_FRNSC(...)   printf("%s:%d:FRNSC:",__FILE__,__LINE__);_XML_PRINTLN(__VA_ARGS__);
+#define _XML_FRNSCF(...)  printf("%s:%d:FRNSC:",__FILE__,__LINE__);_XML_PRINTF(__VA_ARGS__);
+#define _XML_FRNSCA(...)  _XML_PRINTF(__VA_ARGS__);
+#else
+#define _XML_FRNSC(...)
+#define _XML_FRNSCF(...)
+#define _XML_FRNSCA(...)
+
+#endif
 /**
  * Opaque structure holding the parsed xml document
  */
@@ -46,6 +69,7 @@ typedef struct xml_node xml_node_t;
  */
 typedef struct xml_string xml_string_t;
 
+void dump_xml_string(xml_string_t *node);
 
 
 /**

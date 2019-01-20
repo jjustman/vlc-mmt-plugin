@@ -10,6 +10,7 @@
 
 static lls_table_t* __lls_create_base_table_raw(uint8_t* lls, int size) {
 
+	//zero out full struct
 	lls_table_t *base_table = calloc(1, sizeof(lls_table_t));
 
 	//read first 32 bytes in
@@ -150,18 +151,19 @@ lls_table_t* lls_create_table( uint8_t* lls_packet, int size) {
 
 	lls_table_t* lls_table = lls_create_xml_table(lls_packet, size);
 	if(!lls_table) {
-		println("%d:atsc3_lls.c:lls_create_table - error creating instance of LLS table and subclass",__LINE__);
+		_LLS_ERROR("lls_create_table - error creating instance of LLS table and subclass");
 		return NULL;
 	}
 	//process XML payload
 
+	_LLS_DEBUG("lls_create_table, raw xml payload is: \n%s", lls_table->raw_xml.xml_payload);
 	xml_node_t* xml_root = parse_xml_payload(lls_table->raw_xml.xml_payload, lls_table->raw_xml.xml_payload_size);
 
 	//get our first tag name and delegate to parser methods
 
-	printf("%d:lls_create_table: calling process_xml_payload with xml children count: %d\n", __LINE__, xml_node_children(xml_root));
+	_LLS_TRACE("lls_create_table: calling lls_create_table_type_instance with xml children count: %d\n", __LINE__, xml_node_children(xml_root));
 
-	int res = process_xml_payload(lls_table, xml_root);
+	int res = lls_create_table_type_instance(lls_table, xml_root);
 
 	if(!res)
 		return lls_table;
@@ -172,7 +174,7 @@ lls_table_t* lls_create_table( uint8_t* lls_packet, int size) {
 xml_node_t* parse_xml_payload(uint8_t *xml, int xml_size) {
 	xml_document_t* document = xml_parse_document(xml, xml_size);
 	if (!document) {
-		error("Could not parse document\n");
+		_LLS_ERROR("Could not parse document");
 		return NULL;
 	}
 
@@ -186,20 +188,20 @@ xml_node_t* parse_xml_payload(uint8_t *xml, int xml_size) {
 		dump_xml_string(root_node_name);
 	}
 
-	printf("%d:atsc3_lls.c:parse_xml_payload, returning first node:", __LINE__);
+	_LLS_TRACE("%d:atsc3_lls.c:parse_xml_payload, returning first node:");
 	dump_xml_string(root_node_name);
-	printf("\n");
 
 	return root;
 }
 
 #define LLS_TABLE_NAME_SLT "SLT"
-int process_xml_payload(lls_table_t* lls_table, xml_node_t* xml_root) {
+
+int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_root) {
 
 	xml_string_t* root_node_name = xml_node_name(xml_root); //root
 
-	char* node_name = xml_string_clone(root_node_name);
-	printf("%d:process_xml_payload - node ptr: %p, name is: %s, size: %d\n", __LINE__, root_node_name, node_name);
+	uint8_t* node_name = xml_string_clone(root_node_name);
+	_LLS_INFO("lls_create_table_type_instance: lls_table_id: %d, node ptr: %p, name is: %s\n", lls_table->lls_table_id, root_node_name, node_name);
 
 	int ret = -1;
 	if(lls_table->lls_table_id == SLT) {
@@ -207,13 +209,18 @@ int process_xml_payload(lls_table_t* lls_table, xml_node_t* xml_root) {
 		//build SLT table
 		ret = build_SLT_table(lls_table, xml_root);
 
-	} else {
-		error("unknown LLS table type: %s", xml_string_clone(root_node_name));
+	} else if(lls_table->lls_table_id == RRT) {
+		_LLS_ERROR("lls_create_table_type_instance: LLS table RRT not supported yet");
+	} else if(lls_table->lls_table_id == SystemTime) {
+		ret = build_SystemTime_table(lls_table, xml_root);
+	} else if(lls_table->lls_table_id == AEAT) {
+		_LLS_ERROR("lls_create_table_type_instance: LLS table AEAT not supported yet");
+	} else if(lls_table->lls_table_id == OnscreenMessageNotification) {
+		_LLS_ERROR("lls_create_table_type_instance: LLS table OnscreenMessageNotification not supported yet");
 	}
 
 	return ret;
 }
-
 
 #define LLS_SLT_SIMULCAST_TSID 				"SimulcastTSID"
 #define LLS_SLT_SVC_CAPABILITIES			"SvcCapabilities"
@@ -285,22 +292,18 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 			dump_xml_string(child_row_node_xml_string);
 
 			if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_SIMULCAST_TSID)) {
-				error("%d:build_SLT_table - not supported:\n", __LINE__);
-				error(LLS_SLT_SIMULCAST_TSID)
+				_LLS_ERROR("build_SLT_table - not supported: LLS_SLT_SIMULCAST_TSID");
 			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_SVC_CAPABILITIES)) {
-				error("%d:build_SLT_table - not supported:\n", __LINE__);
-				error(LLS_SLT_SVC_CAPABILITIES)
+				_LLS_ERROR("build_SLT_table - not supported: LLS_SLT_SVC_CAPABILITIES");
 			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_BROADCAST_SVC_SIGNALING)) {
 				build_SLT_BROADCAST_SVC_SIGNALING_table(service_entry, service_row_node, child_attributes_kvp);
 
 			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_SVC_INET_URL)) {
-				error("%d:build_SLT_table - not supported:\n", __LINE__);
-				error(LLS_SLT_SVC_INET_URL)
+				_LLS_ERROR("build_SLT_table - not supported: LLS_SLT_SVC_INET_URL");
 			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_OTHER_BSID)) {
-				error("%d:build_SLT_table - not supported:\n", __LINE__);
-				error(LLS_SLT_OTHER_BSID)
+				_LLS_ERROR("build_SLT_table - not supported: LLS_SLT_OTHER_BSID");
 			} else {
-				error("%d:build_SLT_table - unknown type: %s\n", __LINE__, xml_string_clone(child_row_node_xml_string));
+				_LLS_ERROR("build_SLT_table - unknown type: %s\n", xml_string_clone(child_row_node_xml_string));
 			}
 		}
 	}
@@ -320,18 +323,106 @@ void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_
 	//kvp_find_key(kvp_collection, "slsProtocol";
 
 }
-	//process interior attributes, e.g.
 
-void lls_dump_instance_table(lls_table_t *base_table) {
-	println("base table:");
-	println("-----------");
-	println("lls_table_id				: %d	(0x%x)", base_table->lls_table_id, base_table->lls_table_id);
-	println("lls_group_id				: %d	(0x%x)", base_table->lls_group_id, base_table->lls_group_id);
-	println("group_count_minus1			: %d	(0x%x)", base_table->group_count_minus1, base_table->group_count_minus1);
-	println("lls_table_version			: %d	(0x%x)", base_table->lls_table_version, base_table->lls_table_version);
-	println("xml decoded payload size 	: %d", 	base_table->raw_xml.xml_payload_size);
-	println("%s", base_table->raw_xml.xml_payload);
-	println("---");
+/** payload looks like:
+ *
+ * <SystemTime xmlns="http://www.atsc.org/XMLSchemas/ATSC3/Delivery/SYSTIME/1.0/" currentUtcOffset="37" utcLocalOffset="-PT5H" dsStatus="false"/>
+ */
+int build_SystemTime_table(lls_table_t* lls_table, xml_node_t* xml_root) {
+
+	xml_string_t* root_node_name = xml_node_name(xml_root); //root
+	dump_xml_string(root_node_name);
+
+	uint8_t* SystemTime_attributes = xml_attributes_clone(root_node_name);
+	kvp_collection_t* SystemTime_attributes_collecton = kvp_parse_string(SystemTime_attributes);
+
+	int scratch_i = 0;
+
+	char* currentUtcOffset =	kvp_find_key(SystemTime_attributes_collecton, "currentUtcOffset");
+	char* ptpPrepend = 			kvp_find_key(SystemTime_attributes_collecton, "ptpPrepend");
+	char* leap59 =				kvp_find_key(SystemTime_attributes_collecton, "leap59");
+	char* leap61 = 				kvp_find_key(SystemTime_attributes_collecton, "leap61");
+	char* utcLocalOffset = 		kvp_find_key(SystemTime_attributes_collecton, "utcLocalOffset");
+	char* dsStatus = 			kvp_find_key(SystemTime_attributes_collecton, "dsStatus");
+	char* dsDayOfMonth = 		kvp_find_key(SystemTime_attributes_collecton, "dsDayOfMonth");
+	char* dsHour = 				kvp_find_key(SystemTime_attributes_collecton, "dsHour");
+
+	if(!currentUtcOffset || !utcLocalOffset) {
+		_LLS_ERROR("build_SystemTime_table, required elements missing: currentUtcOffset: %p, utcLocalOffset: %p", currentUtcOffset, utcLocalOffset);
+		return -1;
+	}
+
+	itoa(scratch_i, currentUtcOffset, 10);
+
+	//munge negative sign
+	if(scratch_i < 0) {
+		lls_table->system_time_table.current_utc_offset = (1 << 15) | (scratch_i & 0x7FFF);
+	} else {
+		lls_table->system_time_table.current_utc_offset = scratch_i & 0x7FFF;
+	}
+
+	lls_table->system_time_table.utc_local_offset = utcLocalOffset;
+
+	if(ptpPrepend) {
+		itoa(scratch_i, ptpPrepend, 10);
+		lls_table->system_time_table.ptp_prepend = scratch_i & 0xFFFF;
+	}
+
+	if(leap59) {
+		lls_table->system_time_table.leap59 = strcasecmp(leap59, "t");
+	}
+
+	if(leap61) {
+		lls_table->system_time_table.leap61 = strcasecmp(leap61, "t");
+	}
+
+	if(dsStatus) {
+		lls_table->system_time_table.ds_status = strcasecmp(dsStatus, "t");
+	}
+
+	if(dsDayOfMonth) {
+		itoa(scratch_i, dsDayOfMonth, 10);
+		lls_table->system_time_table.ds_status = scratch_i & 0xFF;
+	}
+
+	if(dsHour) {
+		itoa(scratch_i, dsHour, 10);
+		lls_table->system_time_table.ds_status = scratch_i & 0xFF;
+	}
+
+	return 0;
+}
+
+
+void lls_dump_instance_table(lls_table_t* base_table) {
+	_LLS_TRACE("dump_instance_table: base_table address: %p", base_table);
+	_LLS_TRACEN("--------------------------");
+	_LLS_TRACEN("LLS Base Table:");
+	_LLS_TRACEN("--------------------------");
+	_LLS_TRACEN("lls_table_id             : %d (0x%x)", base_table->lls_table_id, base_table->lls_table_id);
+	_LLS_TRACEN("lls_group_id             : %d (0x%x)", base_table->lls_group_id, base_table->lls_group_id);
+	_LLS_TRACEN("group_count_minus1       : %d (0x%x)", base_table->group_count_minus1, base_table->group_count_minus1);
+	_LLS_TRACEN("lls_table_version        : %d (0x%x)", base_table->lls_table_version, base_table->lls_table_version);
+	_LLS_TRACEN("xml decoded payload size : %d", 	base_table->raw_xml.xml_payload_size);
+	_LLS_TRACEN("--------------------------");
+	_LLS_TRACEN("%s", base_table->raw_xml.xml_payload);
+	_LLS_TRACEN("--------------------------");
+
+	//decorate with instance types: hd = int16_t, hu = uint_16t, hhu = uint8_t
+	if(base_table->lls_table_id == SystemTime) {
+		_LLS_TRACEN("SystemTime:");
+		_LLS_TRACEN("--------------------------");
+		_LLS_TRACEN("current_utc_offset       : %hd", base_table->system_time_table.current_utc_offset);
+		_LLS_TRACEN("ptp_prepend              : %hu", base_table->system_time_table.ptp_prepend);
+		_LLS_TRACEN("leap59                   : %d",  base_table->system_time_table.leap59);
+		_LLS_TRACEN("leap61                   : %d",  base_table->system_time_table.leap61);
+		_LLS_TRACEN("utc_local_offset         : %s",  base_table->system_time_table.utc_local_offset);
+		_LLS_TRACEN("ds_status                : %d",  base_table->system_time_table.ds_status);
+		_LLS_TRACEN("ds_day_of_month          : %hhu", base_table->system_time_table.ds_day_of_month);
+		_LLS_TRACEN("ds_hour                  : %hhu", base_table->system_time_table.ds_hour);
+		_LLS_TRACEN("--------------------------");
+
+	}
 
 }
 
@@ -339,7 +430,7 @@ void lls_dump_instance_table(lls_table_t *base_table) {
 
 kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 	int input_len = strlen(input_string);
-	printf("%d:kvp_parse_string: input string len: %d, input string:\n\n%s\n\n", __LINE__, input_len, input_string);
+	_LLS_TRACE("kvp_parse_string: input string len: %d, input string:\n\n%s\n\n", input_len, input_string);
 	kvp_collection_t *collection = calloc(1, sizeof(kvp_collection_t));
 
 	//a= is not valid, must be at least 3 chars
@@ -363,13 +454,13 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 		}
 	}
 
-	printf("%d:parse_kvp_string: creating %d entries\n", __LINE__, equals_count);
+	_LLS_TRACE("parse_kvp_string: creating %d entries", equals_count);
 	equals_count = equals_count < 0 ? 0 : equals_count;
 
 	//if we couldn't parse this, just return the empty (0'd collection)
 	if(!equals_count) return collection;
 
-	collection->kvp_collection = (kvp_t**)calloc(equals_count, sizeof(kvp_t));
+	collection->kvp_collection = (kvp_t**)calloc(equals_count, sizeof(kvp_t**));
 	collection->size_n = equals_count;
 
 	quote_depth = 0;
@@ -377,10 +468,15 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 	int token_key_start = 0;
 	int token_val_start = 0;
 
-	kvp_t* current_kvp = &collection->kvp_collection[kvp_position];
+	kvp_t* current_kvp = NULL;
 
 
 	for(int i=1; i < input_len && kvp_position <= equals_count; i++) {
+		if(!current_kvp) {
+			//alloc our entry
+			collection->kvp_collection[kvp_position] = calloc(1, sizeof(kvp_t*));
+			current_kvp = collection->kvp_collection[kvp_position];
+		}
 		if(isspace(input_string[i]) && !quote_depth) {
 			token_key_start = i + 1; //walk forward
 		} else {
@@ -394,11 +490,11 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 					strncpy(current_kvp->val, &input_string[token_val_start], len);
 					current_kvp->val[len] = '\0';
 
-					printf("%d:parse_kvp_string: (key: %s) marking token_val_start: %d, len: %d\n", __LINE__, current_kvp->key, token_val_start, len);
+					_LLS_TRACE("parse_kvp_string: marking key: %s, token_val_start: %d, len: %d, val: %s", current_kvp->key, token_val_start, len, current_kvp->val);
 
 					//collection->kvp_collection[kvp_position] = (kvp_t*)calloc(1, sizeof(kvp_t*));
-					current_kvp = &collection->kvp_collection[++kvp_position];
-
+					kvp_position++;
+					current_kvp = NULL;
 
 				} else {
 					quote_depth++;
@@ -413,7 +509,7 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 					strncpy(current_kvp->key, &input_string[token_key_start], len);
 					current_kvp->key[len] = '\0';
 
-					printf("%d:parse_kvp_string: marking token_key_start: %d, len: %d, val is: %s\n", __LINE__, token_key_start, len, current_kvp->key);
+					_LLS_TRACE("parse_kvp_string: marking token_key_start: %d, len: %d, val is: %s", token_key_start, len, current_kvp->key);
 
 
 				} else {
@@ -423,7 +519,7 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 		}
 	}
 
-	printf("%d:kvp_parse_string - size is: %d\n", __LINE__, collection->size_n);
+	_LLS_TRACE("kvp_parse_string - size is: %d", collection->size_n);
 	return collection;
 
 }
@@ -432,9 +528,10 @@ kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
 
 char* kvp_find_key(kvp_collection_t *collection, char* key) {
 	for(int i=0; i < collection->size_n; i++) {
-		kvp_t *check = &collection->kvp_collection[i];
-		printf("%d:kvp_find_key: checking: %s against %s, resolved val is: %s\n",__LINE__, check->key, key, check->val);
-		if(strcasecmp(check->key, key)==0) {
+		kvp_t* check = collection->kvp_collection[i];
+		_LLS_TRACE("kvp_find_key: checking: %s against %s, resolved val is: %s", key, check->key, check->val);
+		if(strcasecmp(key, check->key) == 0) {
+			_LLS_TRACE("kvp_find_key: MATCH for key: %s, resolved val is: %s", check->key, check->val);
 			return check->val;
 		}
 	}

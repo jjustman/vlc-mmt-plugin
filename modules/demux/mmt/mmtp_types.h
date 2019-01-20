@@ -124,6 +124,7 @@ typedef struct {
 	uint8_t priority;
 	uint8_t dep_counter;
 	uint64_t pts;
+	uint64_t last_pts;
 } __mpu_data_unit_payload_fragments_timed_t;
 
 //DO NOT REFERENCE INTEREMDIATE STRUCTS DIRECTLY

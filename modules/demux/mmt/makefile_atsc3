@@ -1,4 +1,4 @@
-all: atsc3_lmt_test atsc3_lls.o atsc3_lls_slt_parser_test atsc3_lls_test
+all: atsc3_lmt_test atsc3_lls.o atsc3_lls_slt_parser_test atsc3_lls_test atsc3_lls_SystemTime_test
 
 #-o atsc3_lls.o -lz xml.o
 
@@ -23,4 +23,7 @@ atsc3_lls_test: atsc3_lls_test.c atsc3_lls.o xml.o
 		   
 atsc3_lls_slt_parser_test: atsc3_lls_slt_parser_test.c xml.o
 	cc -g atsc3_lls_slt_parser_test.c xml.o -o atsc3_lls_slt_parser_test 
+
+atsc3_lls_SystemTime_test: atsc3_lls_SystemTime_test.c xml.o atsc3_lls.o
+	cc -g atsc3_lls_SystemTime_test.c atsc3_lls.o xml.o -lz -o atsc3_lls_SystemTime_test 
 

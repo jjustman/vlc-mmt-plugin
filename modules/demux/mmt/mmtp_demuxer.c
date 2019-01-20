@@ -306,7 +306,7 @@ sudo route -nv add -net 224.0.0.0/4 -interface vnic1
 
 
 
-
+block_t* reassembled_mpu_final;
 
 #define ACCESS_TEXT N_("MMTP Demuxer module")
 
@@ -1111,7 +1111,7 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 	//convert to microseconds
 //	es_out_SetPCR( p_obj->out, new_pcr);
 
-	msg_Info(p_obj, "%d:es_out_setPcr, compairing from new: %llu, to last: %llu", new_pcr, mpu_type_packet->mpu_data_unit_payload_fragments_timed.last_pt);
+//	msg_Info(p_obj, "%d:es_out_setPcr, compairing from new: %llu, to last: %llu", new_pcr, mpu_type_packet->mpu_data_unit_payload_fragments_timed.last_pt);
 
 
 	if(new_pcr > mpu_type_packet->mpu_data_unit_payload_fragments_timed.last_pts ) {
@@ -1142,7 +1142,8 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 
 		// p_track->p_es,
 		//isobmff_parameters->mpu_fragments_p_root_box,
-		es_out_Send( p_obj->out, p_track->p_es, block_Duplicate(tmp_mpu_fragment));
+		block_ChainLastAppend(&reassembled_mpu_final, tmp_mpu_fragment);
+		es_out_Send( p_obj->out, p_track->p_es, reassembled_mpu_final);
 		__LOG_MPU_REASSEMBLY(p_obj, "%d:SENDING SINGLE:      track: %d, mmtp_packet_id: %u, mpu_sequence_number: %u, size: %d, pts: %llu, sample: %u, offset: %u, mpu_fragment_type: %hu, mpu_fragmentation_indication: %u, tmp_mpu_fragment: %p",
 				__LINE__,
 				p_track->i_track_ID,
@@ -1250,7 +1251,11 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 		}
 
 		//todo, re-sequence these by fragmentation_counter DESC,
-		block_t* reassembled_mpu_final = block_ChainGather(first);
+	//	block_t* reassembled_mpu_final = block_ChainGather(first);
+
+	//	block_t* reassembled_mpu_final = first;
+		block_ChainLastAppend(&reassembled_mpu_final, reassembled_mpu);
+
 		int samples_missing =  first_fragment_counter - last_fragment_counter - total_sample_count + 1;
 
 		__LOG_MPU_REASSEMBLY(p_obj, "%d:REASSEMBLE METRICS: samples present count: %d, starting w/ first fragment: %c, start fragment #: %d, ending w/ last fragment: %c, end fragment #: %d, missing: %d",
@@ -1262,6 +1267,8 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 
 		if(!started_with_first_fragment_of_du || !ended_with_last_fragment_of_du || samples_missing > 5) {
 			reassembled_mpu_final->i_flags |= BLOCK_FLAG_CORRUPTED;
+		} else {
+			reassembled_mpu_final->i_flags ~= BLOCK_FLAG_CORRUPTED;
 		}
 
 		if(mpu_type_packet->mpu_data_unit_payload_fragments_timed.pts) {
@@ -1281,9 +1288,10 @@ void processMpuPacket(demux_t* p_obj, mmtp_sub_flow_t *mmtp_sub_flow, mmtp_paylo
 			mpu_type_packet->mpu_data_unit_payload_fragments_timed.offset,
 			mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragment_type,
 			mpu_type_packet->mmtp_mpu_type_packet_header.mpu_fragmentation_indicator,
-			(void*) tmp_mpu_fragment);
+			(void*) reassembled_mpu_final);
 
-		es_out_Send( p_obj->out, p_track->p_es, block_Duplicate(reassembled_mpu_final));
+
+		es_out_Send( p_obj->out, p_track->p_es, reassembled_mpu_final);
 
 		//	block_Release(reassembled_mpu_final);
 

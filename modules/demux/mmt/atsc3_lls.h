@@ -14,8 +14,20 @@
 #include "zlib.h"
 #include "xml.h"
 
-#define println(...) printf(__VA_ARGS__);printf("\n")
-#define error(...) printf("ERROR:");println(__VA_ARGS__);
+#define _LLS_PRINTLN(...) printf(__VA_ARGS__);printf("\n")
+#define _LLS_PRINTF(...)  printf(__VA_ARGS__);
+
+#define _LLS_ERROR(...)   printf("%s:%d:ERROR:",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
+#define _LLS_WARN(...)    printf("%s:%d:WARN :",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
+#define _LLS_INFO(...)    printf("%s:%d:INFO :",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
+#define _LLS_DEBUG(...)   printf("%s:%d:DEBUG:",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
+
+#define _LLS_TRACE(...)   printf("%s:%d:TRACE:",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
+#define _LLS_TRACEF(...)  printf("%s:%d:TRACE:",__FILE__,__LINE__);_LLS_PRINTF(__VA_ARGS__);
+#define _LLS_TRACEA(...)  _LLS_PRINTF(__VA_ARGS__);
+#define _LLS_TRACEN(...)  _LLS_PRINTLN(__VA_ARGS__);
+
+
 /***
  * From < A/331 2017 - Signaling Delivery Sync > https://www.atsc.org/wp-content/uploads/2017/12/A331-2017-Signaling-Deivery-Sync-FEC-3.pdf
  * LLS shall be transported in IP packets with address:
@@ -149,7 +161,7 @@ typedef struct service {
 } service_t;
 
 
-typedef struct lls_xml_payload {
+typedef struct slt_table {
 	int**		bsid;			//list
 	int			bsid_n;
 	service_t**	service_entry; 	//list
@@ -157,11 +169,38 @@ typedef struct lls_xml_payload {
 
 } slt_table_t;
 
-typedef struct lls_xml_payload rrt_table_t;
-typedef struct lls_xml_payload system_time_table_t;
-typedef struct lls_xml_payload aeat_table_t;
-typedef struct lls_xml_payload on_screen_message_notification_t;
-typedef struct lls_xml_payload lls_reserved_table_t;
+typedef struct rrt_table {
+
+} rrt_table_t;
+
+/** from atsc a/331 section 6.4
+ *
+
+6.4 System Time Fragment
+
+System time is delivered in the ATSC PHY layer as a 32-bit count of the number of seconds, a 10-
+bit fraction of a second (in units of milliseconds), and optionally 10-bit microsecond and
+nanosecond components, since January 1, 1970 00:00:00, International Atomic Time (TAI), which
+is the Precision Time Protocol (PTP) epoch as defined in IEEE 1588 [47]. Further time-related
+information is signaled in the XML SystemTime element delivered in LLS.
+
+ */
+
+typedef struct system_time_table {
+	int16_t 	current_utc_offset;	//required
+	uint16_t 	ptp_prepend; 		//opt
+	bool		leap59;				//opt
+	bool		leap61;				//opt
+	char*		utc_local_offset;	//required
+	bool		ds_status;			//opt
+	uint8_t		ds_day_of_month;	//opt
+	uint8_t		ds_hour;			//opt
+
+} system_time_table_t;
+
+typedef struct aeat_table { } aeat_table_t;
+typedef struct on_screen_message_notification { } on_screen_message_notification_t;
+typedef struct lls_reserved_table { } lls_reserved_table_t;
 
 typedef enum {
 	SLT = 1,
@@ -255,13 +294,10 @@ lls_table_t* lls_create_table( uint8_t* lls_packet, int size);
 
 void lls_dump_instance_table(lls_table_t *base_table);
 xml_node_t* parse_xml_payload(uint8_t* xml, int xml_size);
-int process_xml_payload(lls_table_t* lls_table, xml_node_t* xml_node);
+int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_node);
 //etst methods
 
-
 void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_t *xml_node, kvp_collection_t* kvp_collection);
-
-
 
 
 #endif /* MODULES_DEMUX_MMT_ASTC3_LLS_H_ */
