@@ -156,7 +156,7 @@ lls_table_t* lls_create_table( uint8_t* lls_packet, int size) {
 	}
 	//process XML payload
 
-	_LLS_DEBUG("lls_create_table, raw xml payload is: \n%s", lls_table->raw_xml.xml_payload);
+	_LLS_TRACE("lls_create_table, raw xml payload is: \n%s", lls_table->raw_xml.xml_payload);
 	xml_node_t* xml_root = parse_xml_payload(lls_table->raw_xml.xml_payload, lls_table->raw_xml.xml_payload_size);
 
 	//get our first tag name and delegate to parser methods
@@ -199,11 +199,10 @@ int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_root)
 	xml_string_t* root_node_name = xml_node_name(xml_root); //root
 
 	uint8_t* node_name = xml_string_clone(root_node_name);
-	_LLS_INFO("lls_create_table_type_instance: lls_table_id: %d, node ptr: %p, name is: %s\n", lls_table->lls_table_id, root_node_name, node_name);
+	_LLS_TRACE("lls_create_table_type_instance: lls_table_id: %d, node ptr: %p, name is: %s\n", lls_table->lls_table_id, root_node_name, node_name);
 
 	int ret = -1;
 	if(lls_table->lls_table_id == SLT) {
-
 		//build SLT table
 		ret = build_SLT_table(lls_table, xml_root);
 
@@ -238,6 +237,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 	char* bsid_char = kvp_find_key(slt_attributes_collecton, "bsid");
 	//if there is a space, split and callocif(strnstr(bsid, "", ))
 
+	//TODO: fix me
 	if(bsid_char) {
 		int bsid_i;
 		itoa(bsid_i, bsid_char, 10);
@@ -247,7 +247,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 		lls_table->slt_table.bsid[0] = bsid_i;
 	}
 
-	printf("%d:build_SLT_table, attributes are: %s\n", __LINE__, slt_attributes);
+	_LLS_TRACE("build_SLT_table, attributes are: %s\n", slt_attributes);
 
 	int svc_size = xml_node_children(xml_root);
 
@@ -259,20 +259,33 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 		/** push service row **/
 		lls_table->slt_table.service_entry_n++;
 		if(!lls_table->slt_table.service_entry) {
-			lls_table->slt_table.service_entry = (service_t**)calloc(32, sizeof(service_t));
+			lls_table->slt_table.service_entry = (service_t**)calloc(32, sizeof(service_t**));
 		}
-		//todo - fix this for proper slab alloc
-
-//		else if(){
-//			realloc(lls_table->slt_table.service_entry, lls_table->slt_table.service_entry_n * sizeof(service_t*));
-//		}
 
 		//service_row_node_xml_string
 		uint8_t* child_row_node_attributes_s = xml_attributes_clone(service_row_node_xml_string);
 		kvp_collection_t* service_attributes_collecton = kvp_parse_string(child_row_node_attributes_s);
 
-		lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1] = calloc(1, sizeof(service_t));
+		lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1] = calloc(1, sizeof(service_t*));
 		service_t* service_entry = lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1];
+		//map in other attributes, e.g
+
+
+		int scratch_i = 0;
+		char* serviceId = kvp_find_key(service_attributes_collecton, "serviceId");
+		if(!serviceId) {
+			_LLS_ERROR("missing serviceId!");
+			return -1;
+		}
+		_LLS_DEBUG("service id is:|%s|", serviceId);
+
+		itoa(scratch_i, serviceId, 10);
+		_LLS_DEBUG("service id is:|%s|", serviceId);
+
+
+		service_entry->service_id = scratch_i & 0xFFFF;
+		_LLS_DEBUG("service id is: %s, int is: %d, uint_16: %u", serviceId, scratch_i, (scratch_i & 0xFFFF));
+
 		service_entry->short_service_name = kvp_find_key(service_attributes_collecton, "shortServiceName");
 
 		int svc_child_size = xml_node_children(service_row_node);
@@ -312,7 +325,7 @@ void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_
 	xml_string_t* service_row_node_xml_string = xml_node_name(service_row_node);
 	uint8_t *svc_attributes = xml_attributes_clone(service_row_node_xml_string);
 
-	printf("%d:build_SLT_BROADCAST_SVC_SIGNALING_table - attributes are: %s", __LINE__, svc_attributes);
+	_LLS_TRACE("build_SLT_BROADCAST_SVC_SIGNALING_table - attributes are: %s", svc_attributes);
 
 	service_table->broadcast_svc_signaling.sls_destination_ip_address = kvp_find_key(kvp_collection, "slsDestinationIpAddress");
 	service_table->broadcast_svc_signaling.sls_destination_udp_port = kvp_find_key(kvp_collection, "slsDestinationUdpPort");
@@ -394,33 +407,68 @@ int build_SystemTime_table(lls_table_t* lls_table, xml_node_t* xml_root) {
 
 void lls_dump_instance_table(lls_table_t* base_table) {
 	_LLS_TRACE("dump_instance_table: base_table address: %p", base_table);
-	_LLS_TRACEN("--------------------------");
-	_LLS_TRACEN("LLS Base Table:");
-	_LLS_TRACEN("--------------------------");
-	_LLS_TRACEN("lls_table_id             : %d (0x%x)", base_table->lls_table_id, base_table->lls_table_id);
-	_LLS_TRACEN("lls_group_id             : %d (0x%x)", base_table->lls_group_id, base_table->lls_group_id);
-	_LLS_TRACEN("group_count_minus1       : %d (0x%x)", base_table->group_count_minus1, base_table->group_count_minus1);
-	_LLS_TRACEN("lls_table_version        : %d (0x%x)", base_table->lls_table_version, base_table->lls_table_version);
-	_LLS_TRACEN("xml decoded payload size : %d", 	base_table->raw_xml.xml_payload_size);
-	_LLS_TRACEN("--------------------------");
-	_LLS_TRACEN("%s", base_table->raw_xml.xml_payload);
-	_LLS_TRACEN("--------------------------");
+	_LLS_DEBUGN("");
+	_LLS_DEBUGN("--------------------------");
+	_LLS_DEBUGN("LLS Base Table:");
+	_LLS_DEBUGN("--------------------------");
+	_LLS_DEBUGN("lls_table_id             : %d (0x%x)", base_table->lls_table_id, base_table->lls_table_id);
+	_LLS_DEBUGN("lls_group_id             : %d (0x%x)", base_table->lls_group_id, base_table->lls_group_id);
+	_LLS_DEBUGN("group_count_minus1       : %d (0x%x)", base_table->group_count_minus1, base_table->group_count_minus1);
+	_LLS_DEBUGN("lls_table_version        : %d (0x%x)", base_table->lls_table_version, base_table->lls_table_version);
+	_LLS_DEBUGN("xml decoded payload size : %d", 	base_table->raw_xml.xml_payload_size);
+	_LLS_DEBUGN("--------------------------");
+	_LLS_DEBUGA("\t%s", base_table->raw_xml.xml_payload);
+	_LLS_DEBUGN("--------------------------");
+
+	if(base_table->lls_table_id == SLT) {
+		_LLS_DEBUGN("SLT");
+		_LLS_DEBUGN("--------------------------");
+		for(int i=0; i < base_table->slt_table.bsid_n; i++) {
+			_LLS_DEBUGNT("BSID: %d", base_table->slt_table.bsid[i]);
+		}
+		_LLS_DEBUGNT("Service contains %d entries:", base_table->slt_table.service_entry_n);
+
+		for(int i=0l; i < base_table->slt_table.service_entry_n; i++) {
+			service_t* service = base_table->slt_table.service_entry[i];
+			_LLS_DEBUGNT("--------------------------");
+			_LLS_DEBUGNT("service_id                : %d", service->service_id);
+			_LLS_DEBUGNT("global_service_id         : %s", service->global_service_id);
+			_LLS_DEBUGNT("major_channel_no          : %d", service->major_channel_no);
+			_LLS_DEBUGNT("minor_channel_no          : %d", service->minor_channel_no);
+			_LLS_DEBUGNT("service_category          : %d", service->service_category);
+			_LLS_DEBUGNT("short_service_name        : %s", service->short_service_name);
+			_LLS_DEBUGNT("slt_svc_seq_num           : %d", service->slt_svc_seq_num);
+			_LLS_DEBUGNT("--------------------------");
+			_LLS_DEBUGNT("broadcast_svc_signaling");
+			_LLS_DEBUGNT("--------------------------");
+			_LLS_DEBUGNT("sls_protocol              : %d", service->broadcast_svc_signaling.sls_protocol );
+			_LLS_DEBUGNT("sls_destination_ip_address: %s", service->broadcast_svc_signaling.sls_destination_ip_address );
+			_LLS_DEBUGNT("sls_destination_udp_port  : %s", service->broadcast_svc_signaling.sls_destination_udp_port );
+			_LLS_DEBUGNT("sls_source_ip_address     : %s", service->broadcast_svc_signaling.sls_source_ip_address );
+			_LLS_DEBUGNT("--------------------------");
+
+		}
+
+		_LLS_DEBUGNT("");
+		_LLS_DEBUGN("--------------------------");
+	}
 
 	//decorate with instance types: hd = int16_t, hu = uint_16t, hhu = uint8_t
 	if(base_table->lls_table_id == SystemTime) {
-		_LLS_TRACEN("SystemTime:");
-		_LLS_TRACEN("--------------------------");
-		_LLS_TRACEN("current_utc_offset       : %hd", base_table->system_time_table.current_utc_offset);
-		_LLS_TRACEN("ptp_prepend              : %hu", base_table->system_time_table.ptp_prepend);
-		_LLS_TRACEN("leap59                   : %d",  base_table->system_time_table.leap59);
-		_LLS_TRACEN("leap61                   : %d",  base_table->system_time_table.leap61);
-		_LLS_TRACEN("utc_local_offset         : %s",  base_table->system_time_table.utc_local_offset);
-		_LLS_TRACEN("ds_status                : %d",  base_table->system_time_table.ds_status);
-		_LLS_TRACEN("ds_day_of_month          : %hhu", base_table->system_time_table.ds_day_of_month);
-		_LLS_TRACEN("ds_hour                  : %hhu", base_table->system_time_table.ds_hour);
-		_LLS_TRACEN("--------------------------");
+		_LLS_DEBUGN("SystemTime:");
+		_LLS_DEBUGN("--------------------------");
+		_LLS_DEBUGNT("current_utc_offset       : %hd", base_table->system_time_table.current_utc_offset);
+		_LLS_DEBUGNT("ptp_prepend              : %hu", base_table->system_time_table.ptp_prepend);
+		_LLS_DEBUGNT("leap59                   : %d",  base_table->system_time_table.leap59);
+		_LLS_DEBUGNT("leap61                   : %d",  base_table->system_time_table.leap61);
+		_LLS_DEBUGNT("utc_local_offset         : %s",  base_table->system_time_table.utc_local_offset);
+		_LLS_DEBUGNT("ds_status                : %d",  base_table->system_time_table.ds_status);
+		_LLS_DEBUGNT("ds_day_of_month          : %hhu", base_table->system_time_table.ds_day_of_month);
+		_LLS_DEBUGNT("ds_hour                  : %hhu", base_table->system_time_table.ds_hour);
+		_LLS_DEBUGN("--------------------------");
 
 	}
+	_LLS_DEBUGN("");
 
 }
 

@@ -23,8 +23,11 @@ atsc3_lls_listener_test.c:100:DEBUG:Destination Address		239.255.10.4
 
 atsc3_lls_listener_test.c:99:DEBUG:Source Address			192.168.0.4
 
+atsc3_lls_listener_test.c:153:DEBUG:Dst. Address : 224.0.23.60 (3758102332)	Dst. Port    : 4937  	Data length: 193
  */
 
+#define LLS_DST_ADDR 3758102332
+#define LLS_DST_PORT 4937
 
 #include <pcap.h>
 #include <stdio.h>
@@ -37,6 +40,8 @@ atsc3_lls_listener_test.c:99:DEBUG:Source Address			192.168.0.4
 #include <netinet/ip.h>
 #include <string.h>
 
+#include "atsc3_lls.h"
+
 
 #define __PRINTLN(...) printf(__VA_ARGS__);printf("\n")
 #define __PRINTF(...)  printf(__VA_ARGS__);
@@ -44,9 +49,18 @@ atsc3_lls_listener_test.c:99:DEBUG:Source Address			192.168.0.4
 #define __ERROR(...)   printf("%s:%d:ERROR:",__FILE__,__LINE__);__PRINTLN(__VA_ARGS__);
 #define __WARN(...)    printf("%s:%d:WARN :",__FILE__,__LINE__);__PRINTLN(__VA_ARGS__);
 #define __INFO(...)    printf("%s:%d:INFO :",__FILE__,__LINE__);__PRINTLN(__VA_ARGS__);
+
+#ifdef _ENABLE_DEBUG
 #define __DEBUG(...)   printf("%s:%d:DEBUG:",__FILE__,__LINE__);__PRINTLN(__VA_ARGS__);
 #define __DEBUGF(...)  printf("%s:%d:DEBUG:",__FILE__,__LINE__);__PRINTF(__VA_ARGS__);
-#define __DEBUGA(...)  __PRINTLN(__VA_ARGS__);
+#define __DEBUGA(...) 	__PRINTF(__VA_ARGS__);
+#define __DEBUGN(...)  __PRINTLN(__VA_ARGS__);
+#else
+#define __DEBUG(...)
+#define __DEBUGF(...)
+#define __DEBUGA(...)
+#define __DEBUGN(...)
+#endif
 
 #ifdef _ENABLE_TRACE
 #define __TRACE(...)   printf("%s:%d:TRACE:",__FILE__,__LINE__);__PRINTLN(__VA_ARGS__);
@@ -65,6 +79,7 @@ void __TRACE_dump_ip_header_info(u_char* ip_header) {
 #else
 #define __TRACE(...)
 #endif
+
 
 typedef struct udp_packet {
 	uint32_t		src_ip_addr;
@@ -146,10 +161,10 @@ void process_packet(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 
 	//4294967295
 	//1234567890
-	__DEBUGF("Source Address     : %d.%d.%d.%d (%-10u) ", ip_header[12], ip_header[13], ip_header[14], ip_header[15], udp_packet->src_ip_addr);
-	__DEBUGA("Source Port        : %d", (udp_header[0] << 8) + udp_header[1]);
-	__DEBUGF("Destination Address: %d.%d.%d.%d     ", ip_header[16], ip_header[17], ip_header[18], ip_header[19]);
-	__DEBUGA("Destination Port   : %d", (udp_header[2] << 8) + udp_header[3]);
+	__DEBUGF("Src. Addr  : %d.%d.%d.%d\t(%-10u)\t", ip_header[12], ip_header[13], ip_header[14], ip_header[15], udp_packet->src_ip_addr);
+	__DEBUGN("Src. Port  : %-5hu ", (udp_header[0] << 8) + udp_header[1]);
+	__DEBUGF("Dst. Addr  : %d.%d.%d.%d\t(%-10u)\t", ip_header[16], ip_header[17], ip_header[18], ip_header[19], udp_packet->dst_ip_addr);
+	__DEBUGA("Dst. Port  : %-5hu \t", (udp_header[2] << 8) + udp_header[3]);
 
 	__TRACE("Length\t\t\t\t\t%d", (udp_header[4] << 8) + udp_header[5]);
 	__TRACE("Checksum\t\t\t\t0x%02x 0x%02x", udp_header[6], udp_header[7]);
@@ -160,7 +175,7 @@ void process_packet(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 		return;
 	}
 
-	__DEBUG("Data length: %d", udp_packet->data_length);
+	__DEBUGN("Data length: %d", udp_packet->data_length);
 	udp_packet->data = malloc(udp_packet->data_length * sizeof(udp_packet->data));
 	memcpy(udp_packet->data, &packet[udp_header_start + 8], udp_packet->data_length);
 
@@ -170,6 +185,25 @@ void process_packet(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 			__TRACE("%02x ", packet[udp_header_start + 8 + i]);
 		}
 	#endif
+
+
+	//dispatch for LLS extraction and dump
+
+	if(udp_packet->dst_ip_addr == LLS_DST_ADDR && udp_packet->dst_port == LLS_DST_PORT) {
+		//process as lls
+		lls_table_t* lls = lls_create_table(udp_packet->data, udp_packet->data_length);
+		if(lls) {
+			lls_dump_instance_table(lls);
+		} else {
+			__ERROR("unable to parse LLS table");
+		}
+	}
+
+	free(udp_packet->data);
+	free(udp_packet);
+
+	udp_packet->data = NULL;
+	udp_packet = NULL;
 
 }
 

@@ -21,10 +21,17 @@
 #define _ATSC3_UTILS_INFO(...)    printf("%s:%d:INFO :",__FILE__,__LINE__);_ATSC3_UTILS_PRINTLN(__VA_ARGS__);
 #define _ATSC3_UTILS_DEBUG(...)   printf("%s:%d:DEBUG:",__FILE__,__LINE__);_ATSC3_UTILS_PRINTLN(__VA_ARGS__);
 
+#ifdef __ENABLE_ATSC3_UTILS_TRACE
 #define _ATSC3_UTILS_TRACE(...)   printf("%s:%d:TRACE:",__FILE__,__LINE__);_ATSC3_UTILS_PRINTLN(__VA_ARGS__);
 #define _ATSC3_UTILS_TRACEF(...)  printf("%s:%d:TRACE:",__FILE__,__LINE__);_ATSC3_UTILS_PRINTF(__VA_ARGS__);
 #define _ATSC3_UTILS_TRACEA(...)  _ATSC3_UTILS_PRINTF(__VA_ARGS__);
 #define _ATSC3_UTILS_TRACEN(...)  _ATSC3_UTILS_PRINTLN(__VA_ARGS__);
+#else
+#define _ATSC3_UTILS_TRACE(...)
+#define _ATSC3_UTILS_TRACEF(...)
+#define _ATSC3_UTILS_TRACEA(...)
+#define _ATSC3_UTILS_TRACEN(...)
+#endif
 
 void strreverse(char* begin, char* end);
 void itoa(int value, char* str, int base);

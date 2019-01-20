@@ -21,12 +21,24 @@
 #define _LLS_ERROR(...)   printf("%s:%d:ERROR:",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
 #define _LLS_WARN(...)    printf("%s:%d:WARN :",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
 #define _LLS_INFO(...)    printf("%s:%d:INFO :",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
-#define _LLS_DEBUG(...)   printf("%s:%d:DEBUG:",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
 
+#define _LLS_DEBUG(...)   printf("%s:%d:DEBUG:",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
+#define _LLS_DEBUGF(...)  printf("%s:%d:DEBUG:",__FILE__,__LINE__);_LLS_PRINTF(__VA_ARGS__);
+#define _LLS_DEBUGA(...)  _LLS_PRINTF(__VA_ARGS__);
+#define _LLS_DEBUGN(...)  _LLS_PRINTLN(__VA_ARGS__);
+#define _LLS_DEBUGNT(...)  _LLS_PRINTF("\t");_LLS_PRINTLN(__VA_ARGS__);
+
+#ifdef __ENABLE_LLS_TRACE
 #define _LLS_TRACE(...)   printf("%s:%d:TRACE:",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
 #define _LLS_TRACEF(...)  printf("%s:%d:TRACE:",__FILE__,__LINE__);_LLS_PRINTF(__VA_ARGS__);
 #define _LLS_TRACEA(...)  _LLS_PRINTF(__VA_ARGS__);
 #define _LLS_TRACEN(...)  _LLS_PRINTLN(__VA_ARGS__);
+#else
+#define _LLS_TRACE(...)
+#define _LLS_TRACEF(...)
+#define _LLS_TRACEA(...)
+#define _LLS_TRACEN(...)
+#endif
 
 
 /***
@@ -80,6 +92,20 @@ Sec. 6.3
 See Annex F Sec. 6.4 Sec. 6.5 Sec. 6.6
      }
  *
+ */
+
+
+
+/*
+ *
+ * To create the proper LLS table type instance, invoke
+ *
+
+ 	lls_table_t* lls = lls_create_table(binary_payload, binary_payload_size);
+	if(lls) {
+		lls_dump_instance_table(lls);
+	}
+
  */
 
 typedef struct llt_xml_payload {
@@ -136,22 +162,23 @@ typedef struct broadcast_svc_signaling {
  *
  */
 typedef struct service {
-	uint	service_id;
-	char*	global_service_id;
-	uint	major_channel_no;
-	uint 	minor_channel_no;
-	uint	service_category;
-	char*	short_service_name;
-	uint8_t slt_svc_seq_num;  //Version of SLT service info for this service.
+	uint16_t	service_id;
+	char*		global_service_id;
+	uint		major_channel_no;
+	uint 		minor_channel_no;
+	uint		service_category;
+	char*		short_service_name;
+	uint8_t 	slt_svc_seq_num;  //Version of SLT service info for this service.
 	broadcast_svc_signaling_t broadcast_svc_signaling;
 } service_t;
 
 
 typedef struct slt_table {
-	int**		bsid;			//list
-	int			bsid_n;
-	service_t**	service_entry; 	//list
-	int			service_entry_n;
+	int**				bsid;			//list
+	int					bsid_n;
+	char*			 	slt_capabilities;
+	service_t**			service_entry; 	//list
+	int					service_entry_n;
 
 } slt_table_t;
 

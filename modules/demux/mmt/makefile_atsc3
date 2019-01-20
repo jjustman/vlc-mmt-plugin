@@ -1,9 +1,9 @@
-all: intermediate libatsc3 unit_tests listener_tests
+all: intermediate libatsc3_core unit_tests listener_tests
 clean:
 	rm *.o
 	
 intermediate: xml.o atsc3_utils.o atsc3_lls.o
-libatsc3: libatsc3.o
+libatsc3_core: libatsc3.o
 unit_tests: atsc3_lmt_test atsc3_lls_slt_parser_test atsc3_lls_test atsc3_lls_SystemTime_test
 listener_tests: atsc3_lls_listener_test
 
@@ -20,7 +20,7 @@ atsc3_lls.o: atsc3_utils.h atsc3_lls.h atsc3_lls.c
 	
 #core libatsc3 library gen
 
-libatsc3: xml.o atsc3_utils.o atsc3_lls.o
+libatsc3.o: xml.o atsc3_utils.o atsc3_lls.o
 	ld -o libatsc3.o -r xml.o atsc3_utils.o atsc3_lls.o 
 
 #unit test generation
