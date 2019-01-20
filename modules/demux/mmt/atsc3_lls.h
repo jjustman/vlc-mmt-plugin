@@ -283,6 +283,9 @@ xml_node_t* parse_xml_payload(uint8_t* xml, int xml_size);
 int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_node);
 //etst methods
 
+int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root);
+
+
 void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_t *xml_node, kvp_collection_t* kvp_collection);
 
 

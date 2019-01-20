@@ -1,10 +1,11 @@
-all: intermediate libatsc3 tests
+all: intermediate libatsc3 unit_tests listener_tests
 clean:
 	rm *.o
 	
 intermediate: xml.o atsc3_utils.o atsc3_lls.o
 libatsc3: libatsc3.o
-tests: atsc3_lmt_test atsc3_lls_slt_parser_test atsc3_lls_test atsc3_lls_SystemTime_test
+unit_tests: atsc3_lmt_test atsc3_lls_slt_parser_test atsc3_lls_test atsc3_lls_SystemTime_test
+listener_tests: atsc3_lls_listener_test
 
 #intermediate object gen
 
@@ -36,3 +37,7 @@ atsc3_lls_slt_parser_test: atsc3_lls_slt_parser_test.c libatsc3.o
 atsc3_lls_SystemTime_test: atsc3_lls_SystemTime_test.c libatsc3.o
 	cc -g atsc3_lls_SystemTime_test.c libatsc3.o -lz -o atsc3_lls_SystemTime_test 
 
+#integration tests
+
+atsc3_lls_listener_test: atsc3_lls_listener_test.c libatsc3.o
+	cc -g atsc3_lls_listener_test.c libatsc3.o -lz -lpcap -o atsc3_lls_listener_test

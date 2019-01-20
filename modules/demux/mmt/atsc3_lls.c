@@ -161,7 +161,7 @@ lls_table_t* lls_create_table( uint8_t* lls_packet, int size) {
 
 	//get our first tag name and delegate to parser methods
 
-	_LLS_TRACE("lls_create_table: calling lls_create_table_type_instance with xml children count: %d\n", __LINE__, xml_node_children(xml_root));
+	_LLS_TRACE("lls_create_table: calling lls_create_table_type_instance with xml children count: %d\n", xml_node_children(xml_root));
 
 	int res = lls_create_table_type_instance(lls_table, xml_root);
 
@@ -193,8 +193,6 @@ xml_node_t* parse_xml_payload(uint8_t *xml, int xml_size) {
 
 	return root;
 }
-
-#define LLS_TABLE_NAME_SLT "SLT"
 
 int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_root) {
 

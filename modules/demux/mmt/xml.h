@@ -70,7 +70,7 @@ typedef struct xml_node xml_node_t;
 typedef struct xml_string xml_string_t;
 
 void dump_xml_string(xml_string_t *node);
-
+bool xml_string_equals_ignore_case(xml_string_t *a, char* b);
 
 /**
  * Tries to parse the XML fragment in buffer
