@@ -876,13 +876,15 @@ struct xml_document* xml_open_document(FILE* source) {
 /**
  * [PUBLIC API]
  */
-void xml_document_free(struct xml_document* document, bool free_buffer) {
+void xml_document_free(xml_document_t* document, bool free_buffer) {
 	xml_node_free(document->root);
 
 	if (free_buffer) {
 		free(document->buffer.buffer);
+		document->buffer.buffer = NULL;
 	}
 	free(document);
+	document = NULL;
 }
 
 

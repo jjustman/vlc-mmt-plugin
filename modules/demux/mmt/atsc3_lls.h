@@ -307,10 +307,14 @@ lls_table_t* lls_create_xml_table( uint8_t* lls_packet, int size);
 lls_table_t* lls_table_create( uint8_t* lls_packet, int size);
 //todo - rename this lls_table_free
 void lls_table_free(lls_table_t* lls_table);
+int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_node);
 
 void lls_dump_instance_table(lls_table_t *base_table);
-xml_node_t* parse_xml_payload(uint8_t* xml, int xml_size);
-int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_node);
+
+//xml parsing methods
+xml_document_t* xml_payload_document_parse(uint8_t *xml, int xml_size);
+xml_node_t* xml_payload_document_extract_root_node(xml_document_t*);
+
 //etst methods
 
 int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root);

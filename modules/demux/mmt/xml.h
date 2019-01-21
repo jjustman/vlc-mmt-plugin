@@ -91,7 +91,7 @@ bool xml_string_equals_ignore_case(xml_string_t *a, char* b);
  *
  * @return The parsed xml fragment iff parsing was successful, 0 otherwise
  */
-struct xml_document* xml_parse_document(uint8_t* buffer, size_t length);
+xml_document_t* xml_parse_document(uint8_t* buffer, size_t length);
 
 
 
@@ -105,7 +105,7 @@ struct xml_document* xml_parse_document(uint8_t* buffer, size_t length);
  *
  * @return The parsed xml fragment iff parsing was successful, 0 otherwise
  */
-struct xml_document* xml_open_document(FILE* source);
+xml_document_t* xml_open_document(FILE* source);
 
 
 
@@ -117,8 +117,7 @@ struct xml_document* xml_open_document(FILE* source);
  * @param free_buffer iff true the internal buffer supplied via xml_parse_buffer
  *     will be freed with the `free` system call
  */
-void xml_document_free(struct xml_document* document, bool free_buffer);
-
+void xml_document_free(xml_document_t* document, bool free_buffer);
 
 /**
  * @return xml_node representing the document root
