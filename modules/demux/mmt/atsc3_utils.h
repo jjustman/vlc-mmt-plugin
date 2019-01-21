@@ -47,7 +47,7 @@ typedef struct kvp_collection {
 	int 	size_n;
 } kvp_collection_t;
 
-kvp_collection_t* kvp_parse_string(uint8_t *input_string);
+kvp_collection_t* kvp_parse_string(uint8_t* input_string);
 char* kvp_find_key(kvp_collection_t *collection, char* key);
 
 

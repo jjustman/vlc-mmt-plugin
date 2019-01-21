@@ -26,6 +26,9 @@ atsc3_lls_listener_test.c:99:DEBUG:Source Address			192.168.0.4
 atsc3_lls_listener_test.c:153:DEBUG:Dst. Address : 224.0.23.60 (3758102332)	Dst. Port    : 4937  	Data length: 193
  */
 
+//#define _ENABLE_TRACE 1
+
+
 #define LLS_DST_ADDR 3758102332
 #define LLS_DST_PORT 4937
 
@@ -64,7 +67,8 @@ atsc3_lls_listener_test.c:153:DEBUG:Dst. Address : 224.0.23.60 (3758102332)	Dst.
 
 #ifdef _ENABLE_TRACE
 #define __TRACE(...)   printf("%s:%d:TRACE:",__FILE__,__LINE__);__PRINTLN(__VA_ARGS__);
-void __TRACE_dump_ip_header_info(u_char* ip_header) {
+
+void __trace_dump_ip_header_info(u_char* ip_header) {
     __TRACE("Version\t\t\t\t\t%d", (ip_header[0] >> 4));
     __TRACE("IHL\t\t\t\t\t\t%d", (ip_header[0] & 0x0F));
     __TRACE("Type of Service\t\t\t%d", ip_header[1]);
@@ -101,8 +105,6 @@ void process_packet(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
   u_char ip_header[24];
   u_char udp_header[8];
   int udp_header_start = 34;
-  int data_length;
-
   udp_packet_t* udp_packet = NULL;
 
 //dump full packet if needed
@@ -139,7 +141,7 @@ void process_packet(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 	}
 
 	#ifdef _ENABLE_TRACE
-        __trace_dump_ip_header_info(&ip_header);
+        __trace_dump_ip_header_info(ip_header);
 	#endif
 
 	if ((ip_header[0] & 0x0F) > 5) {
@@ -170,11 +172,10 @@ void process_packet(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 	__TRACE("Checksum\t\t\t\t0x%02x 0x%02x", udp_header[6], udp_header[7]);
 
 	udp_packet->data_length = pkthdr->len - (udp_header_start + 8);
-	if(udp_packet->data_length < 0 || udp_packet->data_length > 1514) {
+	if(udp_packet->data_length <=0 || udp_packet->data_length > 1514) {
 		__ERROR("invalid data length of udp packet: %d", udp_packet->data_length);
 		return;
 	}
-
 	__DEBUGN("Data length: %d", udp_packet->data_length);
 	udp_packet->data = malloc(udp_packet->data_length * sizeof(udp_packet->data));
 	memcpy(udp_packet->data, &packet[udp_header_start + 8], udp_packet->data_length);
@@ -199,14 +200,18 @@ void process_packet(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 		}
 	}
 
-	free(udp_packet->data);
-	free(udp_packet);
+	if(udp_packet->data) {
+		free(udp_packet->data);
+		udp_packet->data = NULL;
+	}
 
-	udp_packet->data = NULL;
-	udp_packet = NULL;
-
+	if(udp_packet) {
+		free(udp_packet);
+		udp_packet = NULL;
+	}
 }
 
+#define MAX_PCAP_LEN 1514
 int main(int argc,char **argv) {
 
     char *dev;
@@ -228,7 +233,7 @@ int main(int argc,char **argv) {
 
 
     pcap_lookupnet(dev, &netp, &maskp, errbuf);
-    descr = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+    descr = pcap_open_live(dev, MAX_PCAP_LEN, 1, 0, errbuf);
 
     if(descr == NULL) {
         printf("pcap_open_live(): %s",errbuf);

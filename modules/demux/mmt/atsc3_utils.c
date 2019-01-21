@@ -4,14 +4,17 @@
  *  Created on: Jan 19, 2019
  *      Author: jjustman
  */
-#include <stdlib.h>
 
 #include "atsc3_utils.h"
+#include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
+#include <strings.h>
 
 /*
  * Ansi C "itoa" based on Kernighan & Ritchie's "Ansi C"
  * with slight modification to optimize for specific architecture:
- */
+ *
 
 
 void strreverse(char* begin, char* end) {
@@ -47,7 +50,7 @@ void itoa(int value, char* str, int base) {
 	strreverse(str,wstr-1);
 }
 
-
+**/
 
 
 char* kvp_find_key(kvp_collection_t *collection, char* key) {
@@ -62,7 +65,7 @@ char* kvp_find_key(kvp_collection_t *collection, char* key) {
 	return NULL;
 }
 
-kvp_collection_t* kvp_parse_string(uint8_t *input_string) {
+kvp_collection_t* kvp_parse_string(uint8_t* input_string) {
 	int input_len = strlen(input_string);
 	_ATSC3_UTILS_TRACE("kvp_parse_string: input string len: %d, input string:\n\n%s\n\n", input_len, input_string);
 	kvp_collection_t *collection = calloc(1, sizeof(kvp_collection_t));

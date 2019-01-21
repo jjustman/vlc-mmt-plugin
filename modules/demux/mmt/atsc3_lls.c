@@ -226,7 +226,6 @@ int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_root)
 #define LLS_SLT_OTHER_BSID					"OtherBsid"
 
 int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
-
 	/** bsid **/
 
 	xml_string_t* root_node_name = xml_node_name(xml_root); //root
@@ -240,11 +239,11 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 	//TODO: fix me
 	if(bsid_char) {
 		int bsid_i;
-		itoa(bsid_i, bsid_char, 10);
+		bsid_i = atoi(bsid_char);
 
 		lls_table->slt_table.bsid_n = 1;
-		lls_table->slt_table.bsid =  (int**)calloc(lls_table->slt_table.bsid_n , sizeof(int));
-		lls_table->slt_table.bsid[0] = &bsid_i;
+		lls_table->slt_table.bsid =  (int*)calloc(lls_table->slt_table.bsid_n , sizeof(int));
+		lls_table->slt_table.bsid[0] = bsid_i;
 	}
 
 	_LLS_TRACE("build_SLT_table, attributes are: %s\n", slt_attributes);
@@ -258,6 +257,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 
 		/** push service row **/
 		lls_table->slt_table.service_entry_n++;
+		//TODO - grow this dynamically to N?
 		if(!lls_table->slt_table.service_entry) {
 			lls_table->slt_table.service_entry = (service_t**)calloc(32, sizeof(service_t**));
 		}
@@ -277,14 +277,14 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 			_LLS_ERROR("missing serviceId!");
 			return -1;
 		}
-		_LLS_DEBUG("service id is:|%s|", serviceId);
+		_LLS_TRACE("service id is:|%s|", serviceId);
 
-		itoa(scratch_i, serviceId, 10);
-		_LLS_DEBUG("service id is:|%s|", serviceId);
+		scratch_i = atoi(serviceId);
+		_LLS_TRACE("service id is:|%s|", serviceId);
 
 
 		service_entry->service_id = scratch_i & 0xFFFF;
-		_LLS_DEBUG("service id is: %s, int is: %d, uint_16: %u", serviceId, scratch_i, (scratch_i & 0xFFFF));
+		_LLS_TRACE("service id is: %s, int is: %d, uint_16: %u", serviceId, scratch_i, (scratch_i & 0xFFFF));
 
 		service_entry->short_service_name = kvp_find_key(service_attributes_collecton, "shortServiceName");
 
@@ -363,7 +363,7 @@ int build_SystemTime_table(lls_table_t* lls_table, xml_node_t* xml_root) {
 		return -1;
 	}
 
-	itoa(scratch_i, currentUtcOffset, 10);
+	scratch_i = atoi(currentUtcOffset);
 
 	//munge negative sign
 	if(scratch_i < 0) {
@@ -375,29 +375,29 @@ int build_SystemTime_table(lls_table_t* lls_table, xml_node_t* xml_root) {
 	lls_table->system_time_table.utc_local_offset = utcLocalOffset;
 
 	if(ptpPrepend) {
-		itoa(scratch_i, ptpPrepend, 10);
+		scratch_i = atoi(ptpPrepend);
 		lls_table->system_time_table.ptp_prepend = scratch_i & 0xFFFF;
 	}
 
 	if(leap59) {
-		lls_table->system_time_table.leap59 = strcasecmp(leap59, "t");
+		lls_table->system_time_table.leap59 = strcasecmp(leap59, "t") == 0;
 	}
 
 	if(leap61) {
-		lls_table->system_time_table.leap61 = strcasecmp(leap61, "t");
+		lls_table->system_time_table.leap61 = strcasecmp(leap61, "t") == 0;
 	}
 
 	if(dsStatus) {
-		lls_table->system_time_table.ds_status = strcasecmp(dsStatus, "t");
+		lls_table->system_time_table.ds_status = strcasecmp(dsStatus, "t") == 0;
 	}
 
 	if(dsDayOfMonth) {
-		itoa(scratch_i, dsDayOfMonth, 10);
+		scratch_i = atoi(dsDayOfMonth);
 		lls_table->system_time_table.ds_status = scratch_i & 0xFF;
 	}
 
 	if(dsHour) {
-		itoa(scratch_i, dsHour, 10);
+		scratch_i = atoi(dsHour);
 		lls_table->system_time_table.ds_status = scratch_i & 0xFF;
 	}
 
@@ -423,9 +423,9 @@ void lls_dump_instance_table(lls_table_t* base_table) {
 	if(base_table->lls_table_id == SLT) {
 		_LLS_DEBUGN("SLT");
 		_LLS_DEBUGN("--------------------------");
-		for(int i=0; i < base_table->slt_table.bsid_n; i++) {
-			_LLS_DEBUGNT("BSID: %d", *base_table->slt_table.bsid[i]);
-		}
+//		for(int i=0; i < base_table->slt_table.bsid_n; i++) {
+//			_LLS_DEBUGNT("BSID: %d", base_table->slt_table.bsid[i]);
+//		}
 		_LLS_DEBUGNT("Service contains %d entries:", base_table->slt_table.service_entry_n);
 
 		for(int i=0l; i < base_table->slt_table.service_entry_n; i++) {
