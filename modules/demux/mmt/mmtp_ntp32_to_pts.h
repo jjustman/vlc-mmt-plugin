@@ -22,7 +22,7 @@
  *
  * 	instead
  */
-#define REBASE_PTS_OFFSET 5000000
+#define REBASE_PTS_OFFSET 0
 
 void compute_ntp32_to_seconds_microseconds(uint32_t timestamp, uint16_t *seconds, uint16_t *microseconds);
 uint64_t compute_relative_ntp32_pts(uint64_t first_pts, uint16_t mmtp_timestamp_s, uint16_t mmtp_timestamp_microseconds);
