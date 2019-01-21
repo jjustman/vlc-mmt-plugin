@@ -213,7 +213,6 @@ void lls_table_free(lls_table_t* lls_table) {
 				freesafe(lls_table->slt_table.service_entry[i]->broadcast_svc_signaling.sls_destination_udp_port);
 				freesafe(lls_table->slt_table.service_entry[i]->broadcast_svc_signaling.sls_source_ip_address);
 
-
 				free(lls_table->slt_table.service_entry[i]);
 			}
 		}
@@ -374,18 +373,50 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 
 		int scratch_i = 0;
 		char* serviceId = kvp_collection_get(service_attributes_collecton, "serviceId");
+
 		if(!serviceId) {
-			_LLS_ERROR("missing serviceId!");
+			_LLS_ERROR("missing required element - serviceId!");
 			return -1;
 		}
 
 		scratch_i = atoi(serviceId);
 		freesafe(serviceId);
-
 		service_entry->service_id = scratch_i & 0xFFFF;
 		_LLS_TRACE("service id is: %s, int is: %d, uint_16: %u", serviceId, scratch_i, (scratch_i & 0xFFFF));
 
+		//copy our char* elements
+		service_entry->global_service_id  = kvp_collection_get(service_attributes_collecton, "globalServiceID");
 		service_entry->short_service_name = kvp_collection_get(service_attributes_collecton, "shortServiceName");
+
+		char* majorChannelNo  = kvp_collection_get(service_attributes_collecton, "majorChannelNo");
+		char* minorChannelNo  = kvp_collection_get(service_attributes_collecton, "minorChannelNo");
+		char* serviceCategory = kvp_collection_get(service_attributes_collecton, "serviceCategory");
+		char* sltSvcSeqNum    = kvp_collection_get(service_attributes_collecton, "sltSvcSeqNum");
+
+		//optional parameters here
+		if(majorChannelNo) {
+			scratch_i = atoi(majorChannelNo);
+			service_entry->major_channel_no = scratch_i & 0xFFFF;
+			freesafe(majorChannelNo);
+		}
+
+		if(minorChannelNo) {
+			scratch_i = atoi(minorChannelNo);
+			service_entry->minor_channel_no = scratch_i & 0xFFFF;
+			freesafe(minorChannelNo);
+		}
+
+		if(serviceCategory) {
+			scratch_i = atoi(serviceCategory);
+			service_entry->service_category = scratch_i & 0xFFFF;
+			freesafe(serviceCategory);
+		}
+
+		if(sltSvcSeqNum) {
+			scratch_i = atoi(sltSvcSeqNum);
+			service_entry->slt_svc_seq_num = scratch_i & 0xFFFF;
+			freesafe(sltSvcSeqNum);
+		}
 
 		int svc_child_size = xml_node_children(service_row_node);
 
@@ -442,22 +473,37 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 	return 0;
 }
 
-void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_t *service_row_node, kvp_collection_t* kvp_collection) {
+int build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_t *service_row_node, kvp_collection_t* kvp_collection) {
+	int ret = 0;
 	xml_string_t* service_row_node_xml_string = xml_node_name(service_row_node);
 	uint8_t *svc_attributes = xml_attributes_clone(service_row_node_xml_string);
-
 	_LLS_TRACE("build_SLT_BROADCAST_SVC_SIGNALING_table - attributes are: %s", svc_attributes);
+
+	char* slsProtocol = kvp_collection_get(kvp_collection, "slsProtocol");
+	if(!slsProtocol) {
+		_LLS_ERROR("build_SLT_BROADCAST_SVC_SIGNALING_table: missing slsProtocol value");
+		ret = -1;
+		goto cleanup;
+	}
+
+	int scratch_i=0;
+	service_table->broadcast_svc_signaling.sls_protocol = atoi(slsProtocol);
+	freesafe(slsProtocol);
 
 	service_table->broadcast_svc_signaling.sls_destination_ip_address = kvp_collection_get(kvp_collection, "slsDestinationIpAddress");
 	service_table->broadcast_svc_signaling.sls_destination_udp_port = kvp_collection_get(kvp_collection, "slsDestinationUdpPort");
 	service_table->broadcast_svc_signaling.sls_source_ip_address = kvp_collection_get(kvp_collection, "slsSourceIpAddress");
-	service_table->broadcast_svc_signaling.sls_protocol = -1;
+
+
 	//kvp_find_key(kvp_collection, "slsProtocol";
 
+cleanup:
 	//cleanup
 	if(svc_attributes) {
 		free(svc_attributes);
 	}
+
+	return ret;
 }
 
 /** payload looks like:
@@ -567,15 +613,12 @@ void lls_dump_instance_table(lls_table_t* base_table) {
 	_LLS_DEBUGN("--------------------------");
 
 	if(base_table->lls_table_id == SLT) {
-		_LLS_DEBUGN("SLT");
-//		for(int i=0; i < base_table->slt_table.bsid_n; i++) {
-//			_LLS_DEBUGNT("BSID: %d", base_table->slt_table.bsid[i]);
-//		}
-		_LLS_DEBUGNT("Service contains %d entries:", base_table->slt_table.service_entry_n);
+
+		_LLS_DEBUGNT("SLT: Service contains %d entries:", base_table->slt_table.service_entry_n);
 
 		for(int i=0l; i < base_table->slt_table.service_entry_n; i++) {
 			service_t* service = base_table->slt_table.service_entry[i];
-			_LLS_DEBUGNT("--------------------------");
+			_LLS_DEBUGN("---------------------------");
 			_LLS_DEBUGNT("service_id                : %d", service->service_id);
 			_LLS_DEBUGNT("global_service_id         : %s", service->global_service_id);
 			_LLS_DEBUGNT("major_channel_no          : %d", service->major_channel_no);
@@ -583,18 +626,15 @@ void lls_dump_instance_table(lls_table_t* base_table) {
 			_LLS_DEBUGNT("service_category          : %d", service->service_category);
 			_LLS_DEBUGNT("short_service_name        : %s", service->short_service_name);
 			_LLS_DEBUGNT("slt_svc_seq_num           : %d", service->slt_svc_seq_num);
-			_LLS_DEBUGNT("--------------------------");
+			_LLS_DEBUGN("---------------------------");
 			_LLS_DEBUGNT("broadcast_svc_signaling");
-			_LLS_DEBUGNT("--------------------------");
+			_LLS_DEBUGN("---------------------------");
 			_LLS_DEBUGNT("sls_protocol              : %d", service->broadcast_svc_signaling.sls_protocol);
 			_LLS_DEBUGNT("sls_destination_ip_address: %s", service->broadcast_svc_signaling.sls_destination_ip_address);
 			_LLS_DEBUGNT("sls_destination_udp_port  : %s", service->broadcast_svc_signaling.sls_destination_udp_port);
 			_LLS_DEBUGNT("sls_source_ip_address     : %s", service->broadcast_svc_signaling.sls_source_ip_address);
-			_LLS_DEBUGNT("--------------------------");
 
 		}
-
-		_LLS_DEBUGNT("");
 		_LLS_DEBUGN("--------------------------");
 	}
 

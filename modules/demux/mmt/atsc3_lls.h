@@ -26,7 +26,7 @@
 #define _LLS_DEBUGF(...)  printf("%s:%d:DEBUG:",__FILE__,__LINE__);_LLS_PRINTF(__VA_ARGS__);
 #define _LLS_DEBUGA(...)  _LLS_PRINTF(__VA_ARGS__);
 #define _LLS_DEBUGN(...)  _LLS_PRINTLN(__VA_ARGS__);
-#define _LLS_DEBUGNT(...)  _LLS_PRINTF("\t");_LLS_PRINTLN(__VA_ARGS__);
+#define _LLS_DEBUGNT(...)  _LLS_PRINTF(" ");_LLS_PRINTLN(__VA_ARGS__);
 
 #ifdef __ENABLE_LLS_TRACE
 #define _LLS_TRACE(...)   printf("%s:%d:TRACE:",__FILE__,__LINE__);_LLS_PRINTLN(__VA_ARGS__);
@@ -320,7 +320,7 @@ xml_node_t* xml_payload_document_extract_root_node(xml_document_t*);
 int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root);
 int build_SystemTime_table(lls_table_t* lls_table, xml_node_t* xml_root);
 
-void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_t *xml_node, kvp_collection_t* kvp_collection);
+int build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_t *xml_node, kvp_collection_t* kvp_collection);
 
 // internal helper methods here
 int __unzip_gzip_payload(uint8_t *input_payload, uint input_payload_size, uint8_t **decompressed_payload);
