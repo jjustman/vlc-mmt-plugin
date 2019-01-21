@@ -303,7 +303,10 @@ see atsc3_lls_test.c for base64 string getters of test payloads
 
 
 lls_table_t* lls_create_xml_table( uint8_t* lls_packet, int size);
-lls_table_t* lls_create_table( uint8_t* lls_packet, int size);
+//todo - rename this lls_table_create
+lls_table_t* lls_table_create( uint8_t* lls_packet, int size);
+//todo - rename this lls_table_free
+void lls_table_free(lls_table_t* lls_table);
 
 void lls_dump_instance_table(lls_table_t *base_table);
 xml_node_t* parse_xml_payload(uint8_t* xml, int xml_size);

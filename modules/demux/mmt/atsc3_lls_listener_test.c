@@ -192,9 +192,10 @@ void process_packet(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 
 	if(udp_packet->dst_ip_addr == LLS_DST_ADDR && udp_packet->dst_port == LLS_DST_PORT) {
 		//process as lls
-		lls_table_t* lls = lls_create_table(udp_packet->data, udp_packet->data_length);
+		lls_table_t* lls = lls_table_create(udp_packet->data, udp_packet->data_length);
 		if(lls) {
 			lls_dump_instance_table(lls);
+			lls_table_free(lls);
 		} else {
 			__ERROR("unable to parse LLS table");
 		}

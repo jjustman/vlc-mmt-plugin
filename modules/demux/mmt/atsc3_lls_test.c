@@ -109,7 +109,7 @@ int test_lls_create_slt_table(char* base64_payload) {
 
 	__create_binary_payload(base64_payload, &binary_payload, &binary_payload_size);
 
-	lls_table_t* lls = lls_create_table(binary_payload, binary_payload_size);
+	lls_table_t* lls = lls_table_create(binary_payload, binary_payload_size);
 
 	lls_dump_instance_table(lls);
 
@@ -125,7 +125,7 @@ int test_lls_create_slt_route_dash(char* base64_payload) {
 
 	__create_binary_payload(base64_payload, &binary_payload, &binary_payload_size);
 
-	lls_table_t* lls = lls_create_table(binary_payload, binary_payload_size);
+	lls_table_t* lls = lls_table_create(binary_payload, binary_payload_size);
 
 	lls_dump_instance_table(lls);
 

@@ -147,7 +147,7 @@ lls_table_t* lls_create_xml_table( uint8_t* lls_packet, int size) {
 	return NULL;
 }
 
-lls_table_t* lls_create_table( uint8_t* lls_packet, int size) {
+lls_table_t* lls_table_create( uint8_t* lls_packet, int size) {
 
 	lls_table_t* lls_table = lls_create_xml_table(lls_packet, size);
 	if(!lls_table) {
@@ -163,12 +163,28 @@ lls_table_t* lls_create_table( uint8_t* lls_packet, int size) {
 
 	_LLS_TRACE("lls_create_table: calling lls_create_table_type_instance with xml children count: %d\n", xml_node_children(xml_root));
 
-	int res = lls_create_table_type_instance(lls_table, xml_root);
+	if(xml_root) {
+		int res = lls_create_table_type_instance(lls_table, xml_root);
+		free(xml_root);
 
-	if(!res)
-		return lls_table;
-	else
-		return NULL;
+		if(!res)
+			return lls_table;
+	}
+
+	return NULL;
+}
+
+void lls_table_free(lls_table_t* lls_table) {
+	if(!lls_table) {
+		_LLS_TRACE("lls_table_free: lls_table == NULL");
+		return;
+	}
+
+	//free any cloned xmlstrings
+
+
+	//free global table object
+	free(lls_table);
 }
 
 xml_node_t* parse_xml_payload(uint8_t *xml, int xml_size) {
@@ -194,6 +210,7 @@ xml_node_t* parse_xml_payload(uint8_t *xml, int xml_size) {
 	return root;
 }
 
+//caller must free xml_root
 int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_root) {
 
 	xml_string_t* root_node_name = xml_node_name(xml_root); //root
