@@ -201,21 +201,34 @@ void lls_table_free(lls_table_t* lls_table) {
 	//free any instance specific mallocs
 
 	if(lls_table->lls_table_id == SLT) {
-			//build SLT table
-		if(lls_table->slt_table.bsid)
-			free(lls_table->slt_table.bsid);
+
 		//for each service entry alloc, free
 		for(int i=0; i < lls_table->slt_table.service_entry_n; i++) {
 			if(lls_table->slt_table.service_entry[i]) {
+				freesafe(lls_table->slt_table.service_entry[i]->global_service_id);
+				freesafe(lls_table->slt_table.service_entry[i]->short_service_name);
+
+				//clear all char* in broadcast_svc_signaling
+				freesafe(lls_table->slt_table.service_entry[i]->broadcast_svc_signaling.sls_destination_ip_address);
+				freesafe(lls_table->slt_table.service_entry[i]->broadcast_svc_signaling.sls_destination_udp_port);
+				freesafe(lls_table->slt_table.service_entry[i]->broadcast_svc_signaling.sls_source_ip_address);
+
+
 				free(lls_table->slt_table.service_entry[i]);
 			}
 		}
+
 		if(lls_table->slt_table.service_entry)
 			free(lls_table->slt_table.service_entry);
+
+		if(lls_table->slt_table.bsid)
+					free(lls_table->slt_table.bsid);
 
 	} else if(lls_table->lls_table_id == RRT) {
 	//	_LLS_ERROR("lls_create_table_type_instance: LLS table RRT not supported yet");
 	} else if(lls_table->lls_table_id == SystemTime) {
+		freesafe(lls_table->system_time_table.utc_local_offset);
+
 	//	ret = build_SystemTime_table(lls_table, xml_root);
 	} else if(lls_table->lls_table_id == AEAT) {
 	//	_LLS_ERROR("lls_create_table_type_instance: LLS table AEAT not supported yet");
@@ -280,8 +293,6 @@ int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_root)
 	uint8_t* node_name = xml_string_clone(root_node_name);
 	_LLS_TRACE("lls_create_table_type_instance: lls_table_id: %d, node ptr: %p, name is: %s", lls_table->lls_table_id, root_node_name, node_name);
 
-	_LLS_DEBUG("lls_create_table_type_instance: lls_table_id: %d, node ptr: %p, name is: %s", lls_table->lls_table_id, root_node_name, node_name);
-
 	int ret = -1;
 	if(lls_table->lls_table_id == SLT) {
 		//build SLT table
@@ -300,6 +311,8 @@ int lls_create_table_type_instance(lls_table_t* lls_table, xml_node_t* xml_root)
 
 	}
 	_LLS_DEBUG("lls_create_table_type_instance: returning ret: %d, lls_table_id: %d, node ptr: %p, name is: %s", ret, lls_table->lls_table_id, root_node_name, node_name);
+
+	freesafe(node_name);
 
 	return ret;
 }
@@ -327,6 +340,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 	if(bsid_char) {
 		int bsid_i;
 		bsid_i = atoi(bsid_char);
+		freesafe(bsid_char);
 
 		lls_table->slt_table.bsid_n = 1;
 		lls_table->slt_table.bsid =  (int*)calloc(lls_table->slt_table.bsid_n , sizeof(int));
@@ -364,11 +378,9 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 			_LLS_ERROR("missing serviceId!");
 			return -1;
 		}
-		_LLS_TRACE("service id is:|%s|", serviceId);
 
 		scratch_i = atoi(serviceId);
-		_LLS_TRACE("service id is:|%s|", serviceId);
-
+		freesafe(serviceId);
 
 		service_entry->service_id = scratch_i & 0xFFFF;
 		_LLS_TRACE("service id is: %s, int is: %d, uint_16: %u", serviceId, scratch_i, (scratch_i & 0xFFFF));
@@ -420,6 +432,9 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 		}
 	}
 
+	if(slt_attributes) {
+		free(slt_attributes);
+	}
 	if(slt_attributes_collecton) {
 		kvp_collection_free(slt_attributes_collecton);
 	}
@@ -440,7 +455,9 @@ void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_
 	//kvp_find_key(kvp_collection, "slsProtocol";
 
 	//cleanup
-	free(svc_attributes);
+	if(svc_attributes) {
+		free(svc_attributes);
+	}
 }
 
 /** payload looks like:
@@ -475,6 +492,7 @@ int build_SystemTime_table(lls_table_t* lls_table, xml_node_t* xml_root) {
 	}
 
 	scratch_i = atoi(currentUtcOffset);
+	freesafe(currentUtcOffset);
 
 	//munge negative sign
 	if(scratch_i < 0) {
@@ -500,16 +518,19 @@ int build_SystemTime_table(lls_table_t* lls_table, xml_node_t* xml_root) {
 
 	if(dsStatus) {
 		lls_table->system_time_table.ds_status = strcasecmp(dsStatus, "t") == 0;
+		freesafe(dsStatus);
 	}
 
 	if(dsDayOfMonth) {
 		scratch_i = atoi(dsDayOfMonth);
 		lls_table->system_time_table.ds_status = scratch_i & 0xFF;
+		freesafe(dsDayOfMonth);
 	}
 
 	if(dsHour) {
 		scratch_i = atoi(dsHour);
 		lls_table->system_time_table.ds_status = scratch_i & 0xFF;
+		freesafe(dsHour);
 	}
 
 cleanup:

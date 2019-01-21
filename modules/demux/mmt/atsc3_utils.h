@@ -57,7 +57,7 @@ char* kvp_collection_get(kvp_collection_t *collection, char* key);
 char* kvp_collection_get_reference_p(kvp_collection_t *collection, char* key);
 
 void kvp_collection_free(kvp_collection_t* collection);
-
+void freesafe(void* tofree);
 
 
 #endif /* ATSC3_UTILS_H_ */

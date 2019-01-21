@@ -1,6 +1,6 @@
 all: intermediate libatsc3_core unit_tests listener_tests
 clean:
-	rm *.o
+	rm -f *.o
 	
 intermediate: xml.o atsc3_utils.o atsc3_lls.o
 libatsc3_core: libatsc3.o

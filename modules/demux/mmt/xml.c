@@ -195,8 +195,11 @@ bool xml_string_equals_ignore_case(xml_string_t *a, char* b) {
 
  	uint8_t* a_str = calloc(xml_string_length(a) + 1, sizeof(uint8_t));
 	xml_string_copy(a, a_str, xml_string_length(a));
+	int res = (strncasecmp((const char*)a_str, b, b_strlen) == 0);
 
-	return strncasecmp((const char*)a_str, b, b_strlen) == 0;
+	free(a_str);
+
+	return res;
 }
 
 
@@ -254,6 +257,10 @@ static void xml_string_free(struct xml_string* string) {
  */
 static void xml_node_free(struct xml_node* node) {
 	xml_string_free(node->name);
+
+	if(node->attributes) {
+		xml_string_free(node->attributes);
+	}
 
 	if (node->content) {
 		xml_string_free(node->content);

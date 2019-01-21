@@ -204,4 +204,9 @@ kvp_collection_t* kvp_collection_parse(uint8_t* input_string) {
 	return collection;
 }
 
+void freesafe(void* tofree) {
+	if(tofree) {
+		free(tofree);
+	}
+}
 
