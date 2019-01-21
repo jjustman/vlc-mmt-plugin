@@ -330,7 +330,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 	dump_xml_string(root_node_name);
 
 	uint8_t* slt_attributes = xml_attributes_clone(root_node_name);
-	_LLS_DEBUG("build_SLT_table, attributes are: %s", slt_attributes);
+	_LLS_DEBUG("build_SLT_table, attributes are: %s", (const char*)slt_attributes);
 
 	kvp_collection_t* slt_attributes_collecton = kvp_collection_parse(slt_attributes);
 	char* bsid_char = kvp_collection_get(slt_attributes_collecton, "bsid");
@@ -568,7 +568,6 @@ void lls_dump_instance_table(lls_table_t* base_table) {
 
 	if(base_table->lls_table_id == SLT) {
 		_LLS_DEBUGN("SLT");
-		_LLS_DEBUGN("--------------------------");
 //		for(int i=0; i < base_table->slt_table.bsid_n; i++) {
 //			_LLS_DEBUGNT("BSID: %d", base_table->slt_table.bsid[i]);
 //		}
