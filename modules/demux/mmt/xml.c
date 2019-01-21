@@ -1,7 +1,8 @@
 /**
  *
  *
- * 2018-12-06 - jdj - updates for attribute parsing
+ * 2019-01-06 - jdj - updates for attribute parsing
+ * 2019-01-21 - jdj - removed malloc, using calloc to clear out structs
  *
  * Copyright (c) 2012 ooxi/xml.c
  *     https://github.com/ooxi/xml.c
@@ -245,6 +246,11 @@ uint8_t* xml_attributes_clone(xml_string_t* s) {
  *     document's buffer
  */
 static void xml_string_free(struct xml_string* string) {
+	//make sure to clear attributes
+	if(string->attributes) {
+		xml_string_free(string->attributes);
+	}
+
 	free(string);
 }
 
@@ -625,7 +631,7 @@ static struct xml_string* xml_parse_content(struct xml_parser* parser) {
 
 	/* Return text
 	 */
-	struct xml_string* content = malloc(sizeof(struct xml_string));
+	struct xml_string* content = calloc(1, sizeof(struct xml_string));
 	content->buffer = &parser->buffer[start];
 	content->length = length;
 	return content;
@@ -742,7 +748,7 @@ static struct xml_node* xml_parse_node(struct xml_parser* parser) {
 
 	/* Close tag has to match open tag
 	 */
-		_XML_FRNSC("%d::xml_parse_node - before xml_string_equals: tag_open: %p, tag_closed: %p\n", tag_open, tag_close);
+	_XML_FRNSC("%d::xml_parse_node - before xml_string_equals: tag_open: %p, tag_closed: %p\n", tag_open, tag_close);
 
 	if(tag_open && tag_close) {
 		if (!xml_string_equals(tag_open, tag_close)) {
@@ -757,7 +763,7 @@ static struct xml_node* xml_parse_node(struct xml_parser* parser) {
 		xml_string_free(tag_close);
 
 node_creation:;
-	struct xml_node* node = malloc(sizeof(struct xml_node));
+	struct xml_node* node = calloc(1, sizeof(struct xml_node));
 	node->name = tag_open;
 	node->content = content;
 	node->children = children;
@@ -823,7 +829,7 @@ struct xml_document* xml_parse_document(uint8_t* buffer, size_t length) {
 
 	/* Return parsed document
 	 */
-	struct xml_document* document = malloc(sizeof(struct xml_document));
+	struct xml_document* document = calloc(1, sizeof(struct xml_document));
 	document->buffer.buffer = buffer;
 	document->buffer.length = length;
 	document->root = root;
@@ -844,7 +850,7 @@ struct xml_document* xml_open_document(FILE* source) {
 
 	size_t document_length = 0;
 	size_t buffer_size = 1;	// TODO 4069
-	uint8_t* buffer = malloc(buffer_size * sizeof(uint8_t));
+	uint8_t* buffer = calloc(buffer_size, sizeof(uint8_t));
 
 	/* Read hole file into buffer
 	 */
@@ -968,10 +974,11 @@ struct xml_node* xml_easy_child(struct xml_node* node, uint8_t const* child_name
 		 */
 		struct xml_string cn = {
 			.buffer = child_name,
-			.length = strlen((const char*)child_name)
+			.length = strlen((const char*)child_name),
+			.attributes = NULL
 		};
 
-		/* Interate through all children
+		/* Iterate through all children
 		 */
 		struct xml_node* next = 0;
 
