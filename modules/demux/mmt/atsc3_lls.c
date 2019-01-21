@@ -180,10 +180,38 @@ void lls_table_free(lls_table_t* lls_table) {
 		return;
 	}
 
+	//free any instance specific mallocs
+
+	if(lls_table->lls_table_id == SLT) {
+			//build SLT table
+		if(lls_table->slt_table.bsid)
+			free(lls_table->slt_table.bsid);
+		//for each service entry alloc, free
+		for(int i=0; i < lls_table->slt_table.service_entry_n; i++) {
+			if(lls_table->slt_table.service_entry[i]) {
+				free(lls_table->slt_table.service_entry[i]);
+			}
+		}
+		if(lls_table->slt_table.service_entry)
+			free(lls_table->slt_table.service_entry);
+
+	} else if(lls_table->lls_table_id == RRT) {
+	//	_LLS_ERROR("lls_create_table_type_instance: LLS table RRT not supported yet");
+	} else if(lls_table->lls_table_id == SystemTime) {
+	//	ret = build_SystemTime_table(lls_table, xml_root);
+	} else if(lls_table->lls_table_id == AEAT) {
+	//	_LLS_ERROR("lls_create_table_type_instance: LLS table AEAT not supported yet");
+	} else if(lls_table->lls_table_id == OnscreenMessageNotification) {
+	//	_LLS_ERROR("lls_create_table_type_instance: LLS table OnscreenMessageNotification not supported yet");
+	}
+
+
 	//free any cloned xmlstrings
 
 
+
 	//free global table object
+	free(lls_table->raw_xml.xml_payload_compressed);
 	free(lls_table);
 }
 
@@ -206,7 +234,7 @@ xml_node_t* parse_xml_payload(uint8_t *xml, int xml_size) {
 
 	_LLS_TRACE("%d:atsc3_lls.c:parse_xml_payload, returning first node:");
 	dump_xml_string(root_node_name);
-
+	xml_document_free(document, true);
 	return root;
 }
 
@@ -249,8 +277,8 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 	dump_xml_string(root_node_name);
 
 	uint8_t* slt_attributes = xml_attributes_clone(root_node_name);
-	kvp_collection_t* slt_attributes_collecton = kvp_parse_string(slt_attributes);
-	char* bsid_char = kvp_find_key(slt_attributes_collecton, "bsid");
+	kvp_collection_t* slt_attributes_collecton = kvp_collection_parse(slt_attributes);
+	char* bsid_char = kvp_collection_get(slt_attributes_collecton, "bsid");
 	//if there is a space, split and callocif(strnstr(bsid, "", ))
 
 	//TODO: fix me
@@ -281,7 +309,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 
 		//service_row_node_xml_string
 		uint8_t* child_row_node_attributes_s = xml_attributes_clone(service_row_node_xml_string);
-		kvp_collection_t* service_attributes_collecton = kvp_parse_string(child_row_node_attributes_s);
+		kvp_collection_t* service_attributes_collecton = kvp_collection_parse(child_row_node_attributes_s);
 
 		lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1] = calloc(1, sizeof(service_t));
 		service_t* service_entry = lls_table->slt_table.service_entry[lls_table->slt_table.service_entry_n-1];
@@ -289,7 +317,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 
 
 		int scratch_i = 0;
-		char* serviceId = kvp_find_key(service_attributes_collecton, "serviceId");
+		char* serviceId = kvp_collection_get(service_attributes_collecton, "serviceId");
 		if(!serviceId) {
 			_LLS_ERROR("missing serviceId!");
 			return -1;
@@ -303,7 +331,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 		service_entry->service_id = scratch_i & 0xFFFF;
 		_LLS_TRACE("service id is: %s, int is: %d, uint_16: %u", serviceId, scratch_i, (scratch_i & 0xFFFF));
 
-		service_entry->short_service_name = kvp_find_key(service_attributes_collecton, "shortServiceName");
+		service_entry->short_service_name = kvp_collection_get(service_attributes_collecton, "shortServiceName");
 
 		int svc_child_size = xml_node_children(service_row_node);
 
@@ -314,8 +342,9 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 			xml_node_t* child_row_node = xml_node_child(service_row_node, j);
 			xml_string_t* child_row_node_xml_string = xml_node_name(child_row_node);
 
+			//this is a malloc
 			uint8_t* child_row_node_attributes_s = xml_attributes_clone(child_row_node_xml_string);
-			kvp_collection_t* child_attributes_kvp = kvp_parse_string(child_row_node_attributes_s);
+			kvp_collection_t* kvp_child_attributes = kvp_collection_parse(child_row_node_attributes_s);
 
 			dump_xml_string(child_row_node_xml_string);
 
@@ -324,7 +353,7 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_SVC_CAPABILITIES)) {
 				_LLS_ERROR("build_SLT_table - not supported: LLS_SLT_SVC_CAPABILITIES");
 			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_BROADCAST_SVC_SIGNALING)) {
-				build_SLT_BROADCAST_SVC_SIGNALING_table(service_entry, service_row_node, child_attributes_kvp);
+				build_SLT_BROADCAST_SVC_SIGNALING_table(service_entry, service_row_node, kvp_child_attributes);
 
 			} else if(xml_string_equals_ignore_case(child_row_node_xml_string, LLS_SLT_SVC_INET_URL)) {
 				_LLS_ERROR("build_SLT_table - not supported: LLS_SLT_SVC_INET_URL");
@@ -333,6 +362,9 @@ int build_SLT_table(lls_table_t *lls_table, xml_node_t *xml_root) {
 			} else {
 				_LLS_ERROR("build_SLT_table - unknown type: %s\n", xml_string_clone(child_row_node_xml_string));
 			}
+
+			free(child_row_node_attributes_s);
+			kvp_collection_free(kvp_child_attributes);
 		}
 	}
 	return 0;
@@ -344,9 +376,9 @@ void build_SLT_BROADCAST_SVC_SIGNALING_table(service_t* service_table, xml_node_
 
 	_LLS_TRACE("build_SLT_BROADCAST_SVC_SIGNALING_table - attributes are: %s", svc_attributes);
 
-	service_table->broadcast_svc_signaling.sls_destination_ip_address = kvp_find_key(kvp_collection, "slsDestinationIpAddress");
-	service_table->broadcast_svc_signaling.sls_destination_udp_port = kvp_find_key(kvp_collection, "slsDestinationUdpPort");
-	service_table->broadcast_svc_signaling.sls_source_ip_address = kvp_find_key(kvp_collection, "slsSourceIpAddress");
+	service_table->broadcast_svc_signaling.sls_destination_ip_address = kvp_collection_get(kvp_collection, "slsDestinationIpAddress");
+	service_table->broadcast_svc_signaling.sls_destination_udp_port = kvp_collection_get(kvp_collection, "slsDestinationUdpPort");
+	service_table->broadcast_svc_signaling.sls_source_ip_address = kvp_collection_get(kvp_collection, "slsSourceIpAddress");
 	service_table->broadcast_svc_signaling.sls_protocol = -1;
 	//kvp_find_key(kvp_collection, "slsProtocol";
 
@@ -362,18 +394,18 @@ int build_SystemTime_table(lls_table_t* lls_table, xml_node_t* xml_root) {
 	dump_xml_string(root_node_name);
 
 	uint8_t* SystemTime_attributes = xml_attributes_clone(root_node_name);
-	kvp_collection_t* SystemTime_attributes_collecton = kvp_parse_string(SystemTime_attributes);
+	kvp_collection_t* SystemTime_attributes_collecton = kvp_collection_parse(SystemTime_attributes);
 
 	int scratch_i = 0;
 
-	char* currentUtcOffset =	kvp_find_key(SystemTime_attributes_collecton, "currentUtcOffset");
-	char* ptpPrepend = 			kvp_find_key(SystemTime_attributes_collecton, "ptpPrepend");
-	char* leap59 =				kvp_find_key(SystemTime_attributes_collecton, "leap59");
-	char* leap61 = 				kvp_find_key(SystemTime_attributes_collecton, "leap61");
-	char* utcLocalOffset = 		kvp_find_key(SystemTime_attributes_collecton, "utcLocalOffset");
-	char* dsStatus = 			kvp_find_key(SystemTime_attributes_collecton, "dsStatus");
-	char* dsDayOfMonth = 		kvp_find_key(SystemTime_attributes_collecton, "dsDayOfMonth");
-	char* dsHour = 				kvp_find_key(SystemTime_attributes_collecton, "dsHour");
+	char* currentUtcOffset =	kvp_collection_get(SystemTime_attributes_collecton, "currentUtcOffset");
+	char* ptpPrepend = 			kvp_collection_get(SystemTime_attributes_collecton, "ptpPrepend");
+	char* leap59 =				kvp_collection_get(SystemTime_attributes_collecton, "leap59");
+	char* leap61 = 				kvp_collection_get(SystemTime_attributes_collecton, "leap61");
+	char* utcLocalOffset = 		kvp_collection_get(SystemTime_attributes_collecton, "utcLocalOffset");
+	char* dsStatus = 			kvp_collection_get(SystemTime_attributes_collecton, "dsStatus");
+	char* dsDayOfMonth = 		kvp_collection_get(SystemTime_attributes_collecton, "dsDayOfMonth");
+	char* dsHour = 				kvp_collection_get(SystemTime_attributes_collecton, "dsHour");
 
 	if(!currentUtcOffset || !utcLocalOffset) {
 		_LLS_ERROR("build_SystemTime_table, required elements missing: currentUtcOffset: %p, utcLocalOffset: %p", currentUtcOffset, utcLocalOffset);

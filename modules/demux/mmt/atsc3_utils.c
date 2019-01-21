@@ -52,8 +52,29 @@ void itoa(int value, char* str, int base) {
 
 **/
 
+void kvp_collection_free(kvp_collection_t* collection) {
+	if(!collection || !collection->size_n) return;
 
-char* kvp_find_key(kvp_collection_t *collection, char* key) {
+	//free each entry and their corresponding key/val char*
+	for(int i=0; i < collection->size_n; i++) {
+		kvp_t* kvp_to_free = collection->kvp_collection[i];
+		if(kvp_to_free->key) {
+			free(kvp_to_free->key);
+			kvp_to_free->key = NULL;
+		}
+		if(kvp_to_free->val) {
+				free(kvp_to_free->val);
+				kvp_to_free->val = NULL;
+		}
+		free(kvp_to_free);
+		collection->kvp_collection[i] = NULL;
+	}
+
+	free(collection->kvp_collection);
+	collection->kvp_collection = NULL;
+	free(collection);
+}
+char* kvp_collection_get(kvp_collection_t *collection, char* key) {
 	for(int i=0; i < collection->size_n; i++) {
 		kvp_t* check = collection->kvp_collection[i];
 		_ATSC3_UTILS_TRACE("kvp_find_key: checking: %s against %s, resolved val is: %s", key, check->key, check->val);
@@ -65,8 +86,8 @@ char* kvp_find_key(kvp_collection_t *collection, char* key) {
 	return NULL;
 }
 
-kvp_collection_t* kvp_parse_string(uint8_t* input_string) {
-	int input_len = strlen(input_string);
+kvp_collection_t* kvp_collection_parse(uint8_t* input_string) {
+	int input_len = strlen((const char*)input_string);
 	_ATSC3_UTILS_TRACE("kvp_parse_string: input string len: %d, input string:\n\n%s\n\n", input_len, input_string);
 	kvp_collection_t *collection = calloc(1, sizeof(kvp_collection_t));
 
@@ -124,7 +145,7 @@ kvp_collection_t* kvp_parse_string(uint8_t* input_string) {
 					//extract value here
 					int len = i - token_val_start;
 					current_kvp->val = (char*) calloc(len + 1, sizeof(char*));
-					strncpy(current_kvp->val, &input_string[token_val_start], len);
+					strncpy(current_kvp->val, (const char*)&input_string[token_val_start], len);
 					current_kvp->val[len] = '\0';
 
 					_ATSC3_UTILS_TRACE("parse_kvp_string: marking key: %s, token_val_start: %d, len: %d, val: %s", current_kvp->key, token_val_start, len, current_kvp->val);
@@ -143,7 +164,7 @@ kvp_collection_t* kvp_parse_string(uint8_t* input_string) {
 					int len = i - token_key_start;
 
 					current_kvp->key = (char*)calloc(len + 1, sizeof(char));
-					strncpy(current_kvp->key, &input_string[token_key_start], len);
+					strncpy(current_kvp->key, (const char*)&input_string[token_key_start], len);
 					current_kvp->key[len] = '\0';
 
 					_ATSC3_UTILS_TRACE("parse_kvp_string: marking token_key_start: %d, len: %d, val is: %s", token_key_start, len, current_kvp->key);

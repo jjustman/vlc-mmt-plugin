@@ -49,7 +49,7 @@ int main() {
 void test_parse_xml(char* xml) {
 
 	_LLS_DEBUG("parsing: %s", xml);
-	struct xml_document* document = xml_parse_document(xml, strlen(xml));
+	struct xml_document* document = xml_parse_document((uint8_t*)xml, strlen(xml));
 	if (!document) {
 			printf("Could not parse document\n");
 			exit(EXIT_FAILURE);

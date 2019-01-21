@@ -59,7 +59,7 @@ typedef struct xml_string {
 
 void print_substring(const uint8_t *str, int skip, int tail)
 {
-	int max_len = strlen(str);
+	int max_len = strlen((const char*)str);
 	for(int i=skip; i < max_len && i < tail; i++)
 		_XML_TRACEA("%c", str[i]);
 
@@ -196,7 +196,7 @@ bool xml_string_equals_ignore_case(xml_string_t *a, char* b) {
  	uint8_t* a_str = calloc(xml_string_length(a) + 1, sizeof(uint8_t));
 	xml_string_copy(a, a_str, xml_string_length(a));
 
-	return strncasecmp(a_str, b, b_strlen) == 0;
+	return strncasecmp((const char*)a_str, b, b_strlen) == 0;
 }
 
 
@@ -959,7 +959,7 @@ struct xml_node* xml_easy_child(struct xml_node* node, uint8_t const* child_name
 		 */
 		struct xml_string cn = {
 			.buffer = child_name,
-			.length = strlen(child_name)
+			.length = strlen((const char*)child_name)
 		};
 
 		/* Interate through all children
