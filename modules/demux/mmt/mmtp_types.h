@@ -188,8 +188,6 @@ typedef struct VLC_VECTOR(mpu_data_unit_payload_fragments_t *) mpu_data_unit_pay
 
 
 typedef struct {
-	MP4_Box_t*		mpu_fragments_p_root_box;
-	MP4_Box_t*		mpu_fragments_p_moov;
 	mp4_track_t*	mpu_demux_track;
 	block_t*		p_mpu_block;
 	uint32_t     	i_timescale;          /* movie time scale */
@@ -201,6 +199,20 @@ typedef struct {
 	bool        	b_fragmented;   /* fMP4 */
 	bool         	b_seekable;
 	stream_t 		*s_frag;
+
+
+	block_t* 		tmp_mpu_fragment_block_t;
+	//todo - free stream when box is removed - 			vlc_stream_Delete(tmp_mpu_fragment_stream);
+
+	block_t* 		mpu_fragment_block_t;  //capture our MPU Metadat box
+
+	MP4_Box_t*		mpu_fragments_p_root_box;
+	MP4_Box_t*		mpu_fragments_p_moov;
+
+	//reconstitue per movie fragment as needed
+	block_t* 		mp4_movie_fragment_block_t;
+	MP4_Box_t*		mpu_fragments_p_moof;
+
 
 	struct
 	{
