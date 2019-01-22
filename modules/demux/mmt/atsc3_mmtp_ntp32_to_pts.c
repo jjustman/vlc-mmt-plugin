@@ -5,11 +5,7 @@
  *      Author: jjustman
  */
 
-#ifndef MODULES_DEMUX_MMT_MMTP_NTP32_TO_PTS_H_
-#define MODULES_DEMUX_MMT_MMTP_NTP32_TO_PTS_H_
-#include "atsc3_utils.h"
-#include <time.h>
-#include <stdio.h>
+#include "atsc3_mmtp_ntp32_to_pts.h"
 
 /**
  * convert ntp "short-format" packet time into a future re-clocked pts
@@ -22,11 +18,6 @@
  *
  * 	instead
  */
-#define REBASE_PTS_OFFSET 0
-
-void compute_ntp32_to_seconds_microseconds(uint32_t timestamp, uint16_t *seconds, uint16_t *microseconds);
-uint64_t compute_relative_ntp32_pts(uint64_t first_pts, uint16_t mmtp_timestamp_s, uint16_t mmtp_timestamp_microseconds);
-int64_t rebase_now_with_ntp32(uint16_t mmtp_timestamp_s, uint16_t mmtp_timestamp_microseconds);
 
 void compute_ntp32_to_seconds_microseconds(uint32_t timestamp, uint16_t *seconds, uint16_t *microseconds) {
 	//->mmtp_packet_header.mmtp_timestamp, &mmtp_packet->mmtp_packet_header.mmtp_timestamp_s, &mmtp_packet->mmtp_packet_header.mmtp_timestamp_us);
@@ -71,4 +62,3 @@ int64_t rebase_now_with_ntp32(uint16_t mmtp_timestamp_s, uint16_t mmtp_timestamp
 	return pts;
 }
 
-#endif /* MODULES_DEMUX_MMT_MMTP_NTP32_TO_PTS_H_ */
