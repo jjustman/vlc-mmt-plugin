@@ -18,12 +18,13 @@
 
 //#include "libmp4.h"
 //#include "mp4.h"
-#define _MMTP_PRINTLN(...) printf(__VA_ARGS__);printf("\n")
 
+#define _MMTP_PRINTLN(...) printf(__VA_ARGS__);printf("\n")
 #define _MMTP_ERROR(...)   printf("%s:%d:ERROR:",__FILE__,__LINE__);_MMTP_PRINTLN(__VA_ARGS__);
+#define _MMTP_INFO(...)    printf("%s:%d:INFO :",__FILE__,__LINE__);_MMTP_PRINTLN(__VA_ARGS__);
 
 //logging hack to quiet output....
-#define __LOG_INFO(...) (msg_Info(__VA_ARGS__))
+#define __LOG_INFO(...)  (msg_Info(__VA_ARGS__))
 #define __LOG_INFO2(...) (msg_Info(__VA_ARGS__))
 
 #define __LOG_MPU_REASSEMBLY(...)
@@ -67,33 +68,33 @@
 typedef struct mmtp_sub_flow mmtp_sub_flow_t;
 typedef struct block block_t;
 
-#define _MMTP_PACKET_HEADER_FIELDS 			\
-	block_t *raw_packet;					\
-	mmtp_sub_flow_t *mmtp_sub_flow;	\
-	uint8_t mmtp_packet_version; 			\
-	uint8_t packet_counter_flag; 			\
-	uint8_t fec_type; 						\
-	uint8_t mmtp_payload_type;				\
-	uint8_t mmtp_header_extension_flag;		\
-	uint8_t mmtp_rap_flag;					\
-	uint8_t mmtp_qos_flag;					\
-	uint8_t mmtp_flow_identifer_flag;		\
-	uint8_t mmtp_flow_extension_flag;		\
-	uint8_t mmtp_header_compression;		\
-	uint8_t	mmtp_indicator_ref_header_flag;	\
-	uint8_t mmtp_type_of_bitrate;			\
-	uint8_t mmtp_delay_sensitivity;			\
-	uint8_t mmtp_transmission_priority;		\
-	uint8_t flow_label;						\
-	uint16_t mmtp_header_extension_type;	\
-	uint16_t mmtp_header_extension_length;	\
-	uint8_t *mmtp_header_extension_value;	\
-	uint16_t mmtp_packet_id; 				\
-	uint32_t mmtp_timestamp;				\
-	uint16_t mmtp_timestamp_s;				\
-	uint16_t mmtp_timestamp_us;				\
-	uint32_t packet_sequence_number;		\
-	uint32_t packet_counter;				\
+#define _MMTP_PACKET_HEADER_FIELDS 						\
+	block_t*			raw_packet;						\
+	mmtp_sub_flow_t*	mmtp_sub_flow;					\
+	uint8_t 		    mmtp_packet_version; 			\
+	uint8_t 		    packet_counter_flag; 			\
+	uint8_t 		    fec_type; 						\
+	uint8_t 		    mmtp_payload_type;				\
+	uint8_t			    mmtp_header_extension_flag;		\
+	uint8_t 		    mmtp_rap_flag;					\
+	uint8_t 		    mmtp_qos_flag;					\
+	uint8_t 		    mmtp_flow_identifer_flag;		\
+	uint8_t 		    mmtp_flow_extension_flag;		\
+	uint8_t 		    mmtp_header_compression;		\
+	uint8_t			    mmtp_indicator_ref_header_flag;	\
+	uint8_t 		    mmtp_type_of_bitrate;			\
+	uint8_t 		    mmtp_delay_sensitivity;			\
+	uint8_t 		    mmtp_transmission_priority;		\
+	uint8_t 		    flow_label;						\
+	uint16_t		    mmtp_header_extension_type;		\
+	uint16_t		    mmtp_header_extension_length;	\
+	uint8_t*		    mmtp_header_extension_value;	\
+	uint16_t		    mmtp_packet_id; 				\
+	uint32_t		    mmtp_timestamp;					\
+	uint16_t		    mmtp_timestamp_s;				\
+	uint16_t		    mmtp_timestamp_us;				\
+	uint32_t		    packet_sequence_number;			\
+	uint32_t		    packet_counter;					\
 
 //DO NOT REFERENCE INTEREMDIATE STRUCTS DIRECTLY
 typedef struct {
@@ -149,6 +150,18 @@ typedef struct {
 typedef struct {
 	_MMTP_PACKET_HEADER_FIELDS;
 
+	//special mmtp payload header fields, these do not align with the bit specs in 23008-1, but are in logical order
+	uint8_t		si_fragmentation_indiciator; //2 bits,
+	uint8_t		si_additional_length_header; //1 bit
+	uint8_t		si_aggregation_flag; 		 //1 bit
+	uint8_t		si_fragmentation_counter;    //8 bits
+	uint16_t	si_aggregation_message_length; //only set if si_aggregation_flag==1
+
+	uint16_t	message_id;
+	uint8_t		version;
+	uint32_t	length;
+	void*		extension;			//see atsc3_mmt_signaling_message.h for extension
+	void*		payload;			//and payload types
 } __signalling_message_fragments_t;
 
 //DO NOT REFERENCE INTEREMDIATE STRUCTS DIRECTLY
@@ -176,7 +189,7 @@ typedef union mmtp_payload_fragments_union {
 
 typedef struct ATSC3_VECTOR(mmtp_payload_fragments_union_t *) 	mpu_type_packet_header_fields_vector_t;
 typedef struct ATSC3_VECTOR(mmtp_payload_fragments_union_t *) 	mpu_data_unit_payload_fragments_timed_vector_t;
-typedef struct ATSC3_VECTOR(mmtp_payload_fragments_union_t *)		mpu_data_unit_payload_fragments_nontimed_vector_t;
+typedef struct ATSC3_VECTOR(mmtp_payload_fragments_union_t *)	mpu_data_unit_payload_fragments_nontimed_vector_t;
 typedef struct ATSC3_VECTOR(mmtp_payload_fragments_union_t *) 	mmtp_generic_object_fragments_vector_t;
 typedef struct ATSC3_VECTOR(mmtp_payload_fragments_union_t *) 	mmtp_signalling_message_fragments_vector_t;
 typedef struct ATSC3_VECTOR(mmtp_payload_fragments_union_t *) 	mmtp_repair_symbol_vector_t;
@@ -192,7 +205,7 @@ typedef struct {
 typedef struct ATSC3_VECTOR(mpu_data_unit_payload_fragments_t *) mpu_data_unit_payload_fragments_vector_t;
 
 
-
+//partial refactoring from vlc to libatsc3
 #ifndef LIBATSC3_MPU_ISOBMFF_FRAGMENT_PARAMETERS_T_
 #define LIBATSC3_MPU_ISOBMFF_FRAGMENT_PARAMETERS_T_
 
@@ -328,6 +341,6 @@ void mmtp_sub_flow_push_mmtp_packet(mmtp_sub_flow_t *mmtp_sub_flow, mmtp_payload
 
 //returns pointer from udp_raw_buf where we completed header parsing
 uint8_t* mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmtp_packet, uint8_t* udp_raw_buf, uint8_t udp_raw_buf_size);
-
+void mmtp_packet_header_dump(mmtp_payload_fragments_union_t* mmtp_payload_fragments);
 
 #endif /* MODULES_DEMUX_MMT_MMTP_TYPES_H_ */

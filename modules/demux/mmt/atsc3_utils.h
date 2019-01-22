@@ -13,9 +13,7 @@
 
 #include "fixups.h"
 
-
 #define uS 1000000ULL
-
 
 #define _ATSC3_UTILS_PRINTLN(...) printf(__VA_ARGS__);printf("\n")
 #define _ATSC3_UTILS_PRINTF(...)  printf(__VA_ARGS__);
@@ -37,8 +35,7 @@
 #define _ATSC3_UTILS_TRACEN(...)
 #endif
 
-void strreverse(char* begin, char* end);
-void itoa(int value, char* str, int base);
+void* extract(uint8_t *bufPosPtr, uint8_t *dest, int size);
 
 //key=value or key="value" attribute par collection parsing and searching
 typedef struct kvp {

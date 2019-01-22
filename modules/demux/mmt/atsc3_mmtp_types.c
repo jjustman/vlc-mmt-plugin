@@ -250,18 +250,14 @@ void mmtp_sub_flow_push_mmtp_packet(mmtp_sub_flow_t *mmtp_sub_flow, mmtp_payload
  */
 
 
-void* extract(uint8_t *bufPosPtr, uint8_t *dest, int size) {
-	for(int i=0; i < size; i++) {
-		dest[i] = *bufPosPtr++;
-	}
-	return bufPosPtr;
-}
-
-
-
-
 //returns pointer from udp_raw_buf where we completed header parsing
 uint8_t* mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t *mmtp_packet, uint8_t* udp_raw_buf, uint8_t udp_raw_buf_size) {
+
+	if(udp_raw_buf_size < 20) {
+		//bail, the min header is at least 20 bytes
+		_MMTP_ERROR("mmtp_packet_header_parse_from_raw_packet, udp_raw_buf size is: %d", udp_raw_buf_size);
+		return NULL;
+	}
 
 	uint8_t *raw_buf = udp_raw_buf;
 	uint8_t *buf = udp_raw_buf;
@@ -366,9 +362,8 @@ uint8_t* mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t
 
 			mmtp_packet->mmtp_packet_header.mmtp_header_extension_length = mmtp_header_extension_length_bytes[0] << 8 | mmtp_header_extension_length_bytes[1];
 		} else {
-			//walk back our buf position by 2 bytes to start for payload ddata
+			//walk us back for mmtp payload type header parsing
 			buf-=2;
-
 		}
 	} else {
 		_MMTP_ERROR("mmtp_demuxer - unknown packet version of 0x%X", mmtp_packet->mmtp_packet_header.mmtp_packet_version);
@@ -389,6 +384,21 @@ uint8_t* mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments_union_t
 
 error:
 	return NULL;
+}
+
+
+void mmtp_packet_header_dump(mmtp_payload_fragments_union_t* mmtp_payload_fragments) {
+	_MMTP_INFO("------------------");
+	_MMTP_INFO("MMTP Packet Header");
+	_MMTP_INFO("------------------");
+	_MMTP_INFO(" packet version         : %-10d (0x%d%d)", mmtp_payload_fragments->mmtp_packet_header.mmtp_packet_version, ((mmtp_payload_fragments->mmtp_packet_header.mmtp_packet_version >> 1) & 0x1), mmtp_payload_fragments->mmtp_packet_header.mmtp_packet_version & 0x1);
+	_MMTP_INFO(" payload_type           : %-10d (0x%d%d)", mmtp_payload_fragments->mmtp_packet_header.mmtp_payload_type, ((mmtp_payload_fragments->mmtp_packet_header.mmtp_payload_type >> 1) & 0x1), mmtp_payload_fragments->mmtp_packet_header.mmtp_payload_type & 0x1);
+	_MMTP_INFO(" packet_id              : %-10hu (0x%04x)", mmtp_payload_fragments->mmtp_packet_header.mmtp_packet_id, mmtp_payload_fragments->mmtp_packet_header.mmtp_packet_id);
+	_MMTP_INFO(" timestamp              : %-10u (0x%08x)", mmtp_payload_fragments->mmtp_packet_header.mmtp_timestamp, mmtp_payload_fragments->mmtp_packet_header.mmtp_timestamp);
+	_MMTP_INFO(" packet_sequence_number : %-10u (0x%08x)", mmtp_payload_fragments->mmtp_packet_header.packet_sequence_number,mmtp_payload_fragments->mmtp_packet_header.packet_sequence_number);
+	_MMTP_INFO(" packet counter         : %-10u (0x%04x)", mmtp_payload_fragments->mmtp_packet_header.packet_counter, mmtp_payload_fragments->mmtp_packet_header.packet_counter);
+	_MMTP_INFO("------------------");
+
 }
 
 

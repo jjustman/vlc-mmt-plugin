@@ -13,6 +13,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "atsc3_mmtp_types.h"
+
+
+#define _MMSM_PRINTLN(...) printf(__VA_ARGS__);printf("\n")
+#define _MMSM_ERROR(...)   printf("%s:%d:ERROR:",__FILE__,__LINE__);_MMSM_PRINTLN(__VA_ARGS__);
+#define _MMSM_WARN(...)    printf("%s:%d:WARN :",__FILE__,__LINE__);_MMSM_PRINTLN(__VA_ARGS__);
+#define _MMSM_INFO(...)    printf("%s:%d:INFO :",__FILE__,__LINE__);_MMSM_PRINTLN(__VA_ARGS__);
+#define _MMSM_DEBUG(...)   printf("%s:%d:DEBUG:",__FILE__,__LINE__);_MMSM_PRINTLN(__VA_ARGS__);
+#define _MMSM_TRACE(...)   printf("%s:%d:TRACE:",__FILE__,__LINE__);_MMSM_PRINTLN(__VA_ARGS__);
 
 /**
  *
@@ -31,19 +40,103 @@ raw base64 payload:
  *
  */
 
+//signaling message - message id values:
+
+#define PA_message 			0x0000
+
+#define MPI_message_start 	0x0001
+#define MPI_message_end	 	0x0010
+
+#define MPT_message_start	0x0011
+#define MPT_message_end		0x0020
+//		RESERVED			0x0021 ~ 0x01FF
+
+#define	CRI_message			0x0200
+#define	DCI_message			0x0201
+#define	SSWR_message		0x0202
+#define	AL_FEC_message		0x0203
+#define	HRBM_message		0x0204
+#define	MC_message			0x0205
+#define	AC_message			0x0206
+#define	AF_message			0x0207
+#define	RQF_message			0x0208
+#define	ADC_message			0x0209
+#define	HRB_removal_message	0x020A
+#define	LS_message			0x020B
+#define	LR_message			0x020C
+#define	NAMF_message		0x020D
+#define	LDC_message			0x020E
+
+//Reserved for private use 0x8000 ~ 0xFFFF
+
+typedef struct mp_table {
+	uint8_t		table_id;
+	uint8_t		version;
+	uint16_t	length;
+	//6 bits are reserved
+	uint8_t		mp_table_mode;
+
+	//table_id==0x20 || table_id==0x11
+
+	//mmt_package_id (
+	uint8_t		mmt_package_id_length;
+	uint8_t*	mmt_package_id_byte;
+
+	//mp_table_descriptors (
+	uint16_t	mp_table_descriptors_length;
+	uint8_t*	mp_table_descriptors_byte;
+
+	uint8_t		number_of_assets;
+
+	//identifer_mapping()
+	uint32_t	asset_type;
+	//6 bits reserved
+	uint8_t		default_asset_flag;
+
+	uint8_t		asset_clock_relation_flag;
+	uint8_t		asset_clock_relation_id;
+	//7bits reserved
+	uint8_t		asset_timescale_flag;
+	uint32_t	asset_timescale;
+
+	//asset_location (
+	uint8_t		location_count;
+	//mmt_generation_location_info() //?
+
+	//asset_descriptors (
+	uint16_t	asset_descriptors_length;
+	uint8_t		asset_descriptors_byte;
+} mp_table_t;
+
+typedef struct mpt_message {
+	uint16_t	message_id;
+	uint8_t		version;
+	uint16_t	length;
+	mp_table_t  mp_table;
+
+} mpt_message_t;
+
 typedef struct mmt_signaling_message_mpu_tuple {
 	uint32_t mpu_sequence_number;
 	uint64_t mpu_presentation_time;
 } mmt_signaling_message_mpu_tuple_t;
 
-typedef struct mmt_signaling_message_mpu_timestamp_desc {
+typedef struct mmt_signaling_message_mpu_timestamp_descriptor {
 	uint16_t							descriptor_tag;
 	uint8_t								descriptor_length;
 	uint8_t								mpu_tuple_n; //mpu_tuple_n = descriptor_length/12 = (32+64)/8
 	mmt_signaling_message_mpu_tuple_t*	mpu_tuple;
-} mmt_signaling_message_mpu_timestamp_desc_t;
+} mmt_signaling_message_mpu_timestamp_descriptor_t;
 
 
+uint8_t* signaling_message_parse_payload_header(mmtp_payload_fragments_union_t* si_message, uint8_t* udp_raw_buf, uint8_t udp_raw_buf_size);
 
+uint8_t* pa_message_parse(mmtp_payload_fragments_union_t* si_message, uint8_t* udp_raw_buf, uint8_t udp_raw_buf_size);
+uint8_t* mpi_message_parse(mmtp_payload_fragments_union_t* si_message, uint8_t* udp_raw_buf, uint8_t udp_raw_buf_size);
+uint8_t* mpt_message_parse(mmtp_payload_fragments_union_t* si_message, uint8_t* udp_raw_buf, uint8_t udp_raw_buf_size);
+
+uint8_t* si_message_not_supported(mmtp_payload_fragments_union_t* si_message, uint8_t* udp_raw_buf, uint8_t udp_raw_buf_size);
+
+void signaling_message_dump(mmtp_payload_fragments_union_t* si_message);
 
 #endif /* MODULES_DEMUX_MMT_ATSC3_MMT_SIGNALING_MESSAGE_H_ */

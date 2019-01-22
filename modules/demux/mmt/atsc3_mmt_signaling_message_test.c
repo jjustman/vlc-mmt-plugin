@@ -47,10 +47,30 @@ void __create_binary_payload(char *test_payload_base64, uint8_t **binary_payload
 
 int test_mmt_signaling_message_mpu_timestamp_descriptor_table(char* base64_payload) {
 
-	uint8_t *binary_payload;
+	uint8_t* binary_payload;
 	int binary_payload_size;
 
 	__create_binary_payload(base64_payload, &binary_payload, &binary_payload_size);
+
+	mmtp_payload_fragments_union_t* mmtp_payload_fragments = calloc(1, sizeof(mmtp_payload_fragments_union_t));
+
+	uint8_t* raw_packet_ptr = NULL;
+	raw_packet_ptr = mmtp_packet_header_parse_from_raw_packet(mmtp_payload_fragments, binary_payload, binary_payload_size);
+
+	if(!raw_packet_ptr) {
+		_MMSM_ERROR("test_mmt_signaling_message_mpu_timestamp_descriptor_table - raw packet ptr is null!");
+		return -1;
+	}
+	uint8_t new_size = binary_payload_size - (raw_packet_ptr - binary_payload);
+	raw_packet_ptr = signaling_message_parse_payload_header(mmtp_payload_fragments, raw_packet_ptr, new_size);
+
+	new_size = binary_payload_size - (raw_packet_ptr - binary_payload);
+	raw_packet_ptr = signaling_message_parse_payload_table(mmtp_payload_fragments, raw_packet_ptr, new_size);
+
+
+	signaling_message_dump(mmtp_payload_fragments);
+
+
 
 //	lls_table_t* lls = lls_table_create(binary_payload, binary_payload_size);
 //	if(lls) {
