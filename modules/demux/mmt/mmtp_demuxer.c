@@ -278,7 +278,7 @@ sudo route -nv add -net 224.0.0.0/4 -interface vnic1
 
 
 #include "atsc3_utils.h"
-#include "mmtp_types.h"
+#include "atsc3_mmtp_types.h"
 #include "mmtp_stats_marquee.h"
 
 /** cascasde libmp4 headers here ***/
